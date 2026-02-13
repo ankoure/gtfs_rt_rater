@@ -3,15 +3,17 @@ use anyhow::Result;
 use gtfs_rt_rater::{
     parser::parse_feed,
     stats::FeedStats,
-    fetch::fetch_bytes,
+    fetch::{fetch_bytes, BasicClient},
     output::{print_pretty, print_json},
 };
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let arg = std::env::args().nth(1).expect("provide file or url");
 
     let bytes = if arg.starts_with("http") {
-        fetch_bytes(&arg)?
+        let client = BasicClient::new();
+        fetch_bytes(&client, &arg).await?
     } else {
         std::fs::read(arg)?
     };
@@ -20,8 +22,6 @@ fn main() -> Result<()> {
     let stats = FeedStats::from_feed(&feed);
 
     print_pretty(&stats);
-    // or:
-    // print_json(&stats)?;
 
     Ok(())
 }

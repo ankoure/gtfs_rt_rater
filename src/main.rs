@@ -4,7 +4,7 @@ use gtfs_rt_rater::{
     parser::parse_feed,
     stats::FeedStats,
     fetch::{fetch_bytes, BasicClient},
-    output::{print_pretty, print_json},
+    output::{print_pretty},
 };
 
 #[tokio::main]

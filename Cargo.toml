@@ -1,0 +1,19 @@
+[package]
+name = "gtfs_rt_rater"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "gzip", "blocking"] }
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls", "chrono", "json"] }
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+prost = "0.11"        # protobuf parser
+prost-types = "0.11"
+futures = "0.3"       # for FuturesUnordered
+dotenvy = "0.15"
+serde_json = "1.0.149"
+anyhow = "1.0.101"
+[build-dependencies]
+prost-build = "0.14.3"

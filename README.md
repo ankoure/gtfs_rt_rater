@@ -46,7 +46,7 @@ The tool outputs statistics including:
 Example output:
 
 ```
-FeedStats {
+feed_stats {
     total_entities: 321,
     vehicles: 321,
     trip_updates: 0,

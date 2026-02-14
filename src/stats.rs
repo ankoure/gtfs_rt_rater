@@ -159,3 +159,87 @@ impl FeedStats {
         Self::pct(self.with_bearing, self.vehicles)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gtfs_rt::{FeedEntity, FeedMessage, Position, VehiclePosition};
+
+    #[test]
+    fn test_pct_with_zero_total() {
+        assert_eq!(FeedStats::pct(10, 0), 0.0);
+    }
+
+    #[test]
+    fn test_pct_normal_values() {
+        assert_eq!(FeedStats::pct(50, 100), 50.0);
+        assert_eq!(FeedStats::pct(1, 4), 25.0);
+    }
+
+    #[test]
+    fn test_from_feed_empty() {
+        let feed = create_empty_feed();
+        let stats = FeedStats::from_feed(&feed);
+
+        assert_eq!(stats.total_entities, 0);
+        assert_eq!(stats.vehicles, 0);
+    }
+
+    #[test]
+    fn test_from_feed_with_vehicle() {
+        let feed = FeedMessage {
+            header: create_header(),
+            entity: vec![FeedEntity {
+                id: "v1".to_string(),
+                vehicle: Some(VehiclePosition {
+                    position: Some(Position {
+                        latitude: 42.0,
+                        longitude: -71.0,
+                        bearing: Some(180.0),
+                        speed: Some(10.5),
+                        odometer: None,
+                    }),
+                    timestamp: Some(1234567890),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        };
+
+        let stats = FeedStats::from_feed(&feed);
+
+        assert_eq!(stats.total_entities, 1);
+        assert_eq!(stats.vehicles, 1);
+        assert_eq!(stats.with_position, 1);
+        assert_eq!(stats.with_bearing, 1);
+        assert_eq!(stats.with_speed, 1);
+        assert_eq!(stats.with_odometer, 0);
+        assert_eq!(stats.with_timestamp, 1);
+    }
+
+    #[test]
+    fn test_bearing_pct() {
+        let mut stats = FeedStats::default();
+        stats.vehicles = 100;
+        stats.with_bearing = 75;
+
+        assert_eq!(stats.bearing_pct(), 75.0);
+    }
+
+    // Helper functions for tests
+    fn create_empty_feed() -> FeedMessage {
+        FeedMessage {
+            header: create_header(),
+            entity: vec![],
+        }
+    }
+
+    fn create_header() -> crate::gtfs_rt::FeedHeader {
+        crate::gtfs_rt::FeedHeader {
+            gtfs_realtime_version: "2.0".to_string(),
+            timestamp: Some(1234567890),
+            incrementality: None,
+            feed_version: None,
+        }
+    }
+}

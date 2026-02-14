@@ -1,10 +1,10 @@
 use anyhow::Result;
 
 use gtfs_rt_rater::{
+    fetch::{BasicClient, fetch_bytes},
+    output::{append_record, print_pretty},
     parser::parse_feed,
     stats::FeedStats,
-    fetch::{fetch_bytes, BasicClient},
-    output::{print_pretty},
 };
 
 #[tokio::main]
@@ -22,6 +22,7 @@ async fn main() -> Result<()> {
     let stats = FeedStats::from_feed(&feed);
 
     print_pretty(&stats);
+    append_record("data.csv", &stats)?;
 
     Ok(())
 }

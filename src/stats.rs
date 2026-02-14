@@ -1,4 +1,3 @@
-
 use serde::Serialize;
 
 use crate::gtfs_rt::FeedMessage;
@@ -124,7 +123,11 @@ impl FeedStats {
     }
 
     pub fn pct(part: usize, total: usize) -> f64 {
-        if total == 0 { 0.0 } else { (part as f64 / total as f64) * 100.0 }
+        if total == 0 {
+            0.0
+        } else {
+            (part as f64 / total as f64) * 100.0
+        }
     }
 
     pub fn bearing_pct(&self) -> f64 {

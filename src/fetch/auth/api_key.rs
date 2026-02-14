@@ -9,8 +9,10 @@ pub struct ApiKey<C> {
 #[async_trait]
 impl<C: HttpClient> HttpClient for ApiKey<C> {
     async fn execute(&self, mut req: reqwest::Request) -> reqwest::Result<reqwest::Response> {
-        req.headers_mut()
-            .insert("Authorization", format!("Bearer {}", self.key).parse().unwrap());
+        req.headers_mut().insert(
+            "Authorization",
+            format!("Bearer {}", self.key).parse().unwrap(),
+        );
 
         self.inner.execute(req).await
     }

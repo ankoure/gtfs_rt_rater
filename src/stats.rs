@@ -1,9 +1,11 @@
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::gtfs_rt::FeedMessage;
 
 #[derive(Debug, Default, Serialize)]
 pub struct FeedStats {
+    pub timestamp: DateTime<Utc>,
     pub total_entities: usize,
 
     // entity types
@@ -33,7 +35,30 @@ pub struct FeedStats {
 
 impl FeedStats {
     pub fn from_feed(feed: &FeedMessage) -> Self {
-        let mut s = FeedStats::default();
+        let mut s = FeedStats {
+            timestamp: Utc::now(),
+            total_entities: 0,
+            vehicles: 0,
+            trip_updates: 0,
+            alerts: 0,
+            shapes: 0,
+            stops: 0,
+            trip_modifications: 0,
+            with_trip: 0,
+            with_vehicle_descriptor: 0,
+            with_position: 0,
+            with_bearing: 0,
+            with_speed: 0,
+            with_odometer: 0,
+            with_current_stop_sequence: 0,
+            with_stop_id: 0,
+            with_current_status: 0,
+            with_timestamp: 0,
+            with_congestion_level: 0,
+            with_occupancy: 0,
+            with_occupancy_percentage: 0,
+            with_multi_carriage_details: 0,
+        };
 
         s.total_entities = feed.entity.len();
 

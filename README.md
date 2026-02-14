@@ -10,6 +10,7 @@ A Rust CLI tool for parsing and analyzing GTFS Realtime feeds. It calculates sta
 - Calculate statistics on feed entities (vehicles, trip updates, alerts, etc.)
 - Analyze field coverage for vehicle positions (bearing, speed, occupancy, etc.)
 - Output results in pretty-print or JSON format
+- Output results to CSV
 
 ## Requirements
 
@@ -46,28 +47,29 @@ The tool outputs statistics including:
 Example output:
 
 ```
-feed_stats {
-    total_entities: 321,
-    vehicles: 321,
+FeedStats {
+    timestamp: 2026-02-14T03:08:46.351637254Z,
+    total_entities: 363,
+    vehicles: 363,
     trip_updates: 0,
     alerts: 0,
     shapes: 0,
     stops: 0,
     trip_modifications: 0,
-    with_trip: 321,
-    with_vehicle_descriptor: 321,
-    with_position: 321,
-    with_bearing: 278,
-    with_speed: 42,
+    with_trip: 363,
+    with_vehicle_descriptor: 363,
+    with_position: 363,
+    with_bearing: 315,
+    with_speed: 45,
     with_odometer: 0,
-    with_current_stop_sequence: 308,
-    with_stop_id: 308,
-    with_current_status: 321,
-    with_timestamp: 321,
+    with_current_stop_sequence: 351,
+    with_stop_id: 351,
+    with_current_status: 363,
+    with_timestamp: 363,
     with_congestion_level: 0,
-    with_occupancy: 194,
-    with_occupancy_percentage: 194,
-    with_multi_carriage_details: 89,
+    with_occupancy: 233,
+    with_occupancy_percentage: 233,
+    with_multi_carriage_details: 88,
 }
 ```
 
@@ -76,7 +78,6 @@ feed_stats {
 - `prost` - Protocol Buffers parsing
 - `reqwest` - HTTP client for fetching remote feeds
 - `serde` / `serde_json` - Serialization
-- `sqlx` - PostgreSQL database access
 - `tokio` - Async runtime
 - `chrono` - Date/time handling
 - `anyhow` - Error handling

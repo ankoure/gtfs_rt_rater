@@ -1,11 +1,17 @@
 use super::client::HttpClient;
 use async_trait::async_trait;
+use std::time::Duration;
 
 pub struct BasicClient(reqwest::Client);
 
 impl BasicClient {
     pub fn new() -> Self {
-        Self(reqwest::Client::new())
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .expect("Failed to build HTTP client");
+        Self(client)
     }
 }
 

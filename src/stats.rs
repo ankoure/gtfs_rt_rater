@@ -6,6 +6,8 @@ use crate::gtfs_rt::FeedMessage;
 #[derive(Debug, Default, Serialize)]
 pub struct FeedStats {
     pub timestamp: DateTime<Utc>,
+    pub feed_id: Option<String>,
+    pub feed_name: Option<String>,
     pub total_entities: usize,
 
     // entity types
@@ -31,12 +33,18 @@ pub struct FeedStats {
     pub with_occupancy: usize,
     pub with_occupancy_percentage: usize,
     pub with_multi_carriage_details: usize,
+
+    // error tracking
+    pub error_type: Option<String>,
+    pub error_message: Option<String>,
 }
 
 impl FeedStats {
     pub fn from_feed(feed: &FeedMessage) -> Self {
         let mut s = FeedStats {
             timestamp: Utc::now(),
+            feed_id: None,
+            feed_name: None,
             total_entities: 0,
             vehicles: 0,
             trip_updates: 0,
@@ -58,6 +66,8 @@ impl FeedStats {
             with_occupancy: 0,
             with_occupancy_percentage: 0,
             with_multi_carriage_details: 0,
+            error_type: None,
+            error_message: None,
         };
 
         s.total_entities = feed.entity.len();
@@ -157,6 +167,23 @@ impl FeedStats {
 
     pub fn bearing_pct(&self) -> f64 {
         Self::pct(self.with_bearing, self.vehicles)
+    }
+
+    /// Create an error record with timestamp and error information
+    pub fn from_error(error_type: &str, error_message: &str) -> Self {
+        FeedStats {
+            timestamp: Utc::now(),
+            error_type: Some(error_type.to_string()),
+            error_message: Some(error_message.to_string()),
+            ..Default::default()
+        }
+    }
+
+    /// Set feed metadata (id and name)
+    pub fn with_feed_info(mut self, feed_id: &str, feed_name: &str) -> Self {
+        self.feed_id = Some(feed_id.to_string());
+        self.feed_name = Some(feed_name.to_string());
+        self
     }
 }
 

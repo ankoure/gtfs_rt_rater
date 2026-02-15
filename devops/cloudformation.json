@@ -1,0 +1,130 @@
+{
+  "Resources": {
+    "GtfsRtBucketPolicy": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Properties": {
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject"],
+              "Resource": [
+                "arn:aws:s3:::gtfs-rt-feeds",
+                "arn:aws:s3:::gtfs-rt-feeds/*"
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": "s3:ListBucket",
+              "Resource": [
+                "arn:aws:s3:::gtfs-rt-feeds",
+                "arn:aws:s3:::gtfs-rt-feeds/*"
+              ]
+            }
+          ]
+        },
+        "Roles": [
+          {
+            "Ref" : "S3BucketsRole"
+          }
+        ]
+      }
+    },
+    "S3BucketsRole" : {
+      "Type" : "AWS::IAM::Role",
+      "Properties" : {
+        "AssumeRolePolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement" : [
+            {
+              "Effect" : "Allow",
+              "Principal" : {
+                "Service" : ["ec2.amazonaws.com"]
+              },
+              "Action" : [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path" : "/"
+      }
+    },
+    "S3BucketsInstanceProfile" : {
+      "Type" : "AWS::IAM::InstanceProfile",
+      "Properties" : {
+        "Path" : "/",
+        "Roles" : [
+          {
+            "Ref" : "S3BucketsRole"
+          }
+        ]
+      }
+    },
+    "GtfsRtInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-0feba2720136a0493",
+        "InstanceType": "t4g.small",
+        "KeyName": "gtfs-rt-rater",
+        "IamInstanceProfile" : {
+          "Ref" : "S3BucketsInstanceProfile"
+        },
+        "PropagateTagsToVolumeOnCreation": true,
+        "SecurityGroupIds": [
+          {
+            "Ref": "GtfsRtSecurityGroup"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "gtfs-rt-rater"
+          },
+          {
+            "Key": "service",
+            "Value": "gtfs-rt-rater"
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/sda1",
+            "Ebs": {
+              "VolumeSize": 32,
+              "VolumeType": "gp3"
+            }
+          }
+        ]
+      }
+    },
+    "GtfsRtSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupName": {
+          "Fn::Sub": "gtfs-rt-rater-securitygroup"
+        },
+        "GroupDescription": "Allow SSH inbound and outbound traffic",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "InstanceHostname": {
+      "Description": "GTFS RT Rater's public hostname",
+      "Value": {
+        "Fn::GetAtt": [
+          "GtfsRtInstance",
+          "PublicDnsName"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Generate environment file
+        run: |
+          cat >> ./devops/.env << EOF
+          MOBILITYDATA_REFRESH_TOKEN=${{ secrets.MOBILITYDATA_REFRESH_TOKEN }}
+          EOF
+      - name: Write SSH key
+        run: |
+          mkdir ~/.ssh
+          cat >> ~/.ssh/gtfs-rt-rater.pem << EOF
+          ${{ secrets.SSH_PRIVATE_KEY }}
+          EOF
+          chmod 0600 ~/.ssh/gtfs-rt-rater.pem
+      - name: Run deploy shell script
+        run: cd devops && bash ./deploy.sh

@@ -1,5 +1,3 @@
-Based on the project structure and code, here's a README for the project:
-
 # GTFS Realtime Rater
 
 A Rust CLI tool for parsing and analyzing GTFS Realtime feeds. It calculates statistics about the completeness and quality of transit feed data.

@@ -1,16 +1,17 @@
-Based on the project structure and code, here's a README for the project:
-
 # GTFS Realtime Rater
 
 A Rust CLI tool for parsing and analyzing GTFS Realtime feeds. It calculates statistics about the completeness and quality of transit feed data.
 
 ## Features
 
-- Parse GTFS Realtime protobuf feeds from files or URLs
-- Calculate statistics on feed entities (vehicles, trip updates, alerts, etc.)
-- Analyze field coverage for vehicle positions (bearing, speed, occupancy, etc.)
-- Output results in pretty-print or JSON format
-- Output results to CSV
+- **Parse GTFS Realtime feeds** from files or URLs
+- **Calculate statistics** on feed entities (vehicles, trip updates, alerts, etc.)
+- **Analyze field coverage** for vehicle positions (bearing, speed, occupancy, etc.)
+- **MobilityData integration** - automatically discover and process feeds from the MobilityData Catalog
+- **Batch processing** - consume all public feeds concurrently
+- **Time-series sampling** - collect samples at regular intervals for monitoring feed health over time
+- **Multiple output formats** - pretty-print, JSON, and CSV
+- **Configurable timeouts** - 30s request timeout, 10s connect timeout
 
 ## Requirements
 
@@ -22,19 +23,84 @@ cargo build --release
 ```
 ## Usage
 
+The tool provides several commands for analyzing GTFS-RT feeds:
+
+### Analyze a Single Feed
+
 Analyze a local GTFS-RT feed file:
 
 ```bash
-cargo run -- path/to/feed.pb
+cargo run -- analyze path/to/feed.pb
 ```
-
-
 
 Analyze a GTFS-RT feed from a URL:
 
-```shell script
-cargo run -- https://cdn.mbta.com/realtime/VehiclePositions.pb
+```bash
+cargo run -- analyze https://cdn.mbta.com/realtime/VehiclePositions.pb
 ```
+
+Specify a custom output CSV file:
+
+```bash
+cargo run -- analyze https://example.com/feed.pb --output custom-output.csv
+```
+
+### List Available Feeds
+
+List all vehicle position feeds from MobilityData with status information:
+
+```bash
+cargo run -- list-feeds
+```
+
+Output shows:
+- 🔓 = No authentication required, 🔒 = Authentication required
+- ✓ = Has URL, ✗ = No URL
+- Status: active, deprecated, inactive, development, or future
+- Summary statistics (deprecated count, auth required, etc.)
+
+### Consume All Public Feeds
+
+Automatically fetch and analyze all public vehicle position feeds from MobilityData.
+
+**Note:** This command automatically filters out:
+- Feeds requiring authentication
+- Feeds without URLs
+- Deprecated feeds
+
+**Basic usage** (single sample):
+```bash
+cargo run -- consume-all-feeds
+```
+
+**Collect multiple samples** (10 samples, every 30 seconds):
+```bash
+cargo run -- consume-all-feeds -r 30 -n 10
+```
+
+**Run continuously** (infinite sampling every 2 minutes):
+```bash
+cargo run -- consume-all-feeds -r 120 -n 0
+```
+
+**High-frequency monitoring** (sample every 10 seconds with 10 concurrent downloads):
+```bash
+cargo run -- consume-all-feeds -c 10 -r 10 -n 0
+```
+
+**Custom output directory**:
+```bash
+cargo run -- consume-all-feeds --output-dir my-feeds -r 60 -n 5
+```
+
+#### Options for `consume-all-feeds`:
+
+- `-o, --output-dir <DIR>` - Directory to save CSV files (one per feed, default: `feeds/`)
+- `-c, --concurrency <N>` - Maximum concurrent downloads (default: 5)
+- `-r, --sample-rate <SEC>` - Query each feed every X seconds (default: 60)
+- `-n, --num-samples <N>` - Number of samples to collect, 0 = infinite (default: 1)
+
+**Note:** You need to set the `MOBILITYDATA_REFRESH_TOKEN` environment variable in a `.env` file to use MobilityData features.
 
 
 ## Output
@@ -43,8 +109,31 @@ The tool outputs statistics including:
 
 - **Entity counts**: vehicles, trip updates, alerts, shapes, stops, trip modifications
 - **Vehicle field coverage**: position, bearing, speed, odometer, occupancy, timestamps, etc.
+- **Error tracking**: Records fetch errors and parse errors with timestamps and details
+- **Feed metadata**: Feed ID and provider name for easy identification
 
-Example output:
+### CSV Output Format
+
+Each CSV file contains one row per sample with the following columns:
+
+**Success rows:**
+- `timestamp` - When the sample was collected
+- `feed_id` - MobilityData feed identifier (e.g., "mdb-2335")
+- `feed_name` - Provider name
+- `total_entities` - Number of entities in the feed
+- Statistics fields (vehicles, with_bearing, etc.)
+- `error_type` - Empty for successful fetches
+- `error_message` - Empty for successful fetches
+
+**Error rows:**
+- Same timestamp, feed_id, and feed_name
+- All statistics set to 0
+- `error_type` - Either "fetch_error" (network/timeout) or "parse_error" (invalid data)
+- `error_message` - Detailed error description
+
+This allows you to track feed reliability over time and identify problematic feeds.
+
+### Console Output Example
 
 ```
 FeedStats {
@@ -73,6 +162,20 @@ FeedStats {
 }
 ```
 
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file in the project root with the following:
+
+```env
+MOBILITYDATA_REFRESH_TOKEN=your_refresh_token_here
+```
+
+To obtain a MobilityData refresh token:
+1. Sign up at [mobilitydatabase.org](https://mobilitydatabase.org)
+2. Get your refresh token from your Account Details page
+
 ## Dependencies
 
 - `prost` - Protocol Buffers parsing
@@ -81,6 +184,9 @@ FeedStats {
 - `tokio` - Async runtime
 - `chrono` - Date/time handling
 - `anyhow` - Error handling
+- `clap` - Command-line argument parsing
+- `csv` - CSV output
+- `dotenvy` - Environment variable loading
 
 ## License
 

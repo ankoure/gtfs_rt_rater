@@ -52,9 +52,9 @@
         "iam:TagPolicy"
       ],
       "Resource": [
-        "arn:aws:iam::*:role/S3BucketsRole*",
-        "arn:aws:iam::*:instance-profile/S3BucketsInstanceProfile*",
-        "arn:aws:iam::*:policy/GtfsRtBucketPolicy*"
+        "arn:aws:iam::*:role/gtfs-rt-rater-*",
+        "arn:aws:iam::*:instance-profile/gtfs-rt-rater-*",
+        "arn:aws:iam::*:policy/gtfs-rt-rater-*"
       ]
     },
     {

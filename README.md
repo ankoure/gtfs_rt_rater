@@ -93,14 +93,29 @@ cargo run -- consume-all-feeds -c 10 -r 10 -n 0
 cargo run -- consume-all-feeds --output-dir my-feeds -r 60 -n 5
 ```
 
+**Upload to S3 with gzip compression**:
+```bash
+cargo run -- consume-all-feeds --s3-bucket my-bucket --gzip -r 60 -n 0
+```
+
+**How S3 uploads work:**
+- CSV files are written locally to `feeds/Year=2026/Month=02/Day=15/{agency-id}.csv` based on the current UTC date
+- Each day at first sample, the previous day's completed files are automatically gzipped and uploaded to S3
+- S3 path pattern: `Year={year}/Month={month}/Day={day}/{agency-id}.csv.gz`
+- This ensures complete daily files are uploaded without repeatedly uploading growing files
+
 #### Options for `consume-all-feeds`:
 
 - `-o, --output-dir <DIR>` - Directory to save CSV files (one per feed, default: `feeds/`)
 - `-c, --concurrency <N>` - Maximum concurrent downloads (default: 5)
 - `-r, --sample-rate <SEC>` - Query each feed every X seconds (default: 60)
 - `-n, --num-samples <N>` - Number of samples to collect, 0 = infinite (default: 1)
+- `--s3-bucket <BUCKET>` - Optional S3 bucket name to upload CSV files (e.g., `my-bucket`)
+- `--gzip` - Optional flag to gzip compress CSV files before uploading to S3
 
 **Note:** You need to set the `MOBILITYDATA_REFRESH_TOKEN` environment variable in a `.env` file to use MobilityData features.
+
+**Note:** When using S3 upload, ensure your AWS credentials are configured (via environment variables, AWS config files, or IAM roles).
 
 
 ## Output

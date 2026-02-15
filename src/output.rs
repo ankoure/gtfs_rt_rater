@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::info;
 
 use crate::stats::FeedStats;
 use csv::WriterBuilder;
@@ -6,11 +7,11 @@ use std::fs::OpenOptions;
 use std::path::Path;
 
 pub fn print_pretty(stats: &FeedStats) {
-    println!("{:#?}", stats);
+    info!("{:#?}", stats);
 }
 
 pub fn print_json(stats: &FeedStats) -> Result<()> {
-    println!("{}", serde_json::to_string_pretty(stats)?);
+    info!("{}", serde_json::to_string_pretty(stats)?);
     Ok(())
 }
 

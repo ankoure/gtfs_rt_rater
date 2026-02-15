@@ -4,18 +4,18 @@ mod services;
 use crate::infra::mobilitydata::client::MobilityDataClient;
 use crate::services::catalog_api::CatalogApi;
 use anyhow::Result;
+use aws_sdk_s3::primitives::ByteStream;
+use chrono::Utc;
 use clap::{Parser, Subcommand};
-use log::{info, error, warn};
+use flate2::Compression;
+use flate2::write::GzEncoder;
 use gtfs_rt_rater::{
     fetch::{BasicClient, fetch_bytes},
     output::{append_record, print_pretty},
     parser::parse_feed,
     stats::FeedStats,
 };
-use aws_sdk_s3::primitives::ByteStream;
-use chrono::Utc;
-use flate2::write::GzEncoder;
-use flate2::Compression;
+use log::{error, info, warn};
 use std::io::Write;
 
 #[derive(Parser)]
@@ -139,7 +139,15 @@ async fn main() -> Result<()> {
             s3_bucket,
             gzip,
         } => {
-            consume_all_feeds(&output_dir, concurrency, sample_rate, num_samples, s3_bucket, gzip).await?;
+            consume_all_feeds(
+                &output_dir,
+                concurrency,
+                sample_rate,
+                num_samples,
+                s3_bucket,
+                gzip,
+            )
+            .await?;
         }
     }
 
@@ -232,7 +240,9 @@ async fn consume_all_feeds(
                 if last_upload_date.is_none() || last_upload_date.unwrap() < today {
                     if let Some(yesterday) = today.pred_opt() {
                         info!("\n=== Uploading previous day's files to S3 ===");
-                        if let Err(e) = upload_previous_day_files(s3, bucket, output_dir, yesterday, gzip).await {
+                        if let Err(e) =
+                            upload_previous_day_files(s3, bucket, output_dir, yesterday, gzip).await
+                        {
                             error!("Failed to upload previous day's files: {}", e);
                         } else {
                             info!("✓ Successfully uploaded previous day's files");
@@ -346,7 +356,10 @@ async fn upload_previous_day_files(
 
     // Check if directory exists
     if !std::path::Path::new(&daily_dir).exists() {
-        warn!("No directory found for {}-{}-{}, skipping upload", year, month, day);
+        warn!(
+            "No directory found for {}-{}-{}, skipping upload",
+            year, month, day
+        );
         return Ok(());
     }
 
@@ -392,6 +405,9 @@ async fn upload_previous_day_files(
         }
     }
 
-    info!("✓ Uploaded {} files for {}-{}-{}", upload_count, year, month, day);
+    info!(
+        "✓ Uploaded {} files for {}-{}-{}",
+        upload_count, year, month, day
+    );
     Ok(())
 }

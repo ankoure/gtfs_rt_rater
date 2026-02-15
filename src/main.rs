@@ -73,7 +73,9 @@ async fn main() -> Result<()> {
             print_pretty(&stats);
             append_record(&output, &stats)?;
         }
-        Commands::ListFeeds { vehicle_positions: _ } => {
+        Commands::ListFeeds {
+            vehicle_positions: _,
+        } => {
             let refresh_token = std::env::var("MOBILITYDATA_REFRESH_TOKEN")
                 .expect("MOBILITYDATA_REFRESH_TOKEN must be set");
             let client = MobilityDataClient::new(refresh_token).await?;
@@ -87,19 +89,25 @@ async fn main() -> Result<()> {
                 let auth_str = if feed.requires_auth { "🔒" } else { "🔓" };
                 let url_str = if feed.url.is_some() { "✓" } else { "✗" };
 
-                println!("{} {} [{}] {} - {}",
-                    auth_str, url_str, status_str, feed.id, feed.name);
+                println!(
+                    "{} {} [{}] {} - {}",
+                    auth_str, url_str, status_str, feed.id, feed.name
+                );
             }
 
-            let deprecated_count = feeds.iter().filter(|f| f.status.as_deref() == Some("deprecated")).count();
+            let deprecated_count = feeds
+                .iter()
+                .filter(|f| f.status.as_deref() == Some("deprecated"))
+                .count();
             let auth_required = feeds.iter().filter(|f| f.requires_auth).count();
             let no_url = feeds.iter().filter(|f| f.url.is_none()).count();
 
-            let processable = feeds.iter().filter(|f| {
-                !f.requires_auth
-                && f.url.is_some()
-                && f.status.as_deref() != Some("deprecated")
-            }).count();
+            let processable = feeds
+                .iter()
+                .filter(|f| {
+                    !f.requires_auth && f.url.is_some() && f.status.as_deref() != Some("deprecated")
+                })
+                .count();
 
             println!("\nSummary:");
             println!("  Total feeds: {}", feeds.len());
@@ -108,7 +116,12 @@ async fn main() -> Result<()> {
             println!("  No URL: {}", no_url);
             println!("  Processable by consume-all-feeds: {}", processable);
         }
-        Commands::ConsumeAllFeeds { output_dir, concurrency, sample_rate, num_samples } => {
+        Commands::ConsumeAllFeeds {
+            output_dir,
+            concurrency,
+            sample_rate,
+            num_samples,
+        } => {
             consume_all_feeds(&output_dir, concurrency, sample_rate, num_samples).await?;
         }
     }
@@ -125,7 +138,12 @@ async fn fetcher(url: &String) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-async fn consume_all_feeds(output_dir: &str, concurrency: usize, sample_rate: u64, num_samples: usize) -> Result<()> {
+async fn consume_all_feeds(
+    output_dir: &str,
+    concurrency: usize,
+    sample_rate: u64,
+    num_samples: usize,
+) -> Result<()> {
     let refresh_token = std::env::var("MOBILITYDATA_REFRESH_TOKEN")
         .expect("MOBILITYDATA_REFRESH_TOKEN must be set");
     let client = MobilityDataClient::new(refresh_token).await?;
@@ -137,18 +155,25 @@ async fn consume_all_feeds(output_dir: &str, concurrency: usize, sample_rate: u6
     let public_feeds: Vec<_> = feeds
         .into_iter()
         .filter(|f| {
-            !f.requires_auth
-            && f.url.is_some()
-            && f.status.as_deref() != Some("deprecated")
+            !f.requires_auth && f.url.is_some() && f.status.as_deref() != Some("deprecated")
         })
         .collect();
 
-    println!("Found {} public feeds to process (excluding deprecated)", public_feeds.len());
+    println!(
+        "Found {} public feeds to process (excluding deprecated)",
+        public_feeds.len()
+    );
 
     if num_samples == 0 {
-        println!("Sampling infinitely every {} seconds. Press Ctrl+C to stop.", sample_rate);
+        println!(
+            "Sampling infinitely every {} seconds. Press Ctrl+C to stop.",
+            sample_rate
+        );
     } else {
-        println!("Collecting {} sample(s) every {} seconds", num_samples, sample_rate);
+        println!(
+            "Collecting {} sample(s) every {} seconds",
+            num_samples, sample_rate
+        );
     }
 
     // Create output directory if it doesn't exist
@@ -164,7 +189,15 @@ async fn consume_all_feeds(output_dir: &str, concurrency: usize, sample_rate: u6
         }
 
         sample_count += 1;
-        println!("\n=== Sample {} {} ===", sample_count, if num_samples == 0 { "(infinite mode)".to_string() } else { format!("of {}", num_samples) });
+        println!(
+            "\n=== Sample {} {} ===",
+            sample_count,
+            if num_samples == 0 {
+                "(infinite mode)".to_string()
+            } else {
+                format!("of {}", num_samples)
+            }
+        );
 
         let mut tasks = vec![];
 
@@ -182,25 +215,23 @@ async fn consume_all_feeds(output_dir: &str, concurrency: usize, sample_rate: u6
                 let output_file = format!("{}/{}.csv", output_dir, feed.id);
 
                 match fetch_bytes(&http_client, url).await {
-                    Ok(bytes) => {
-                        match parse_feed(&bytes) {
-                            Ok(parsed_feed) => {
-                                let stats = FeedStats::from_feed(&parsed_feed)
-                                    .with_feed_info(&feed.id, &feed.name);
-                                if let Err(e) = append_record(&output_file, &stats) {
-                                    eprintln!("Failed to write stats for {}: {}", feed.id, e);
-                                } else {
-                                    println!("✓ {} - {}", feed.id, feed.name);
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("✗ Failed to parse feed {}: {}", feed.id, e);
-                                let error_stats = FeedStats::from_error("parse_error", &e.to_string())
-                                    .with_feed_info(&feed.id, &feed.name);
-                                let _ = append_record(&output_file, &error_stats);
+                    Ok(bytes) => match parse_feed(&bytes) {
+                        Ok(parsed_feed) => {
+                            let stats = FeedStats::from_feed(&parsed_feed)
+                                .with_feed_info(&feed.id, &feed.name);
+                            if let Err(e) = append_record(&output_file, &stats) {
+                                eprintln!("Failed to write stats for {}: {}", feed.id, e);
+                            } else {
+                                println!("✓ {} - {}", feed.id, feed.name);
                             }
                         }
-                    }
+                        Err(e) => {
+                            eprintln!("✗ Failed to parse feed {}: {}", feed.id, e);
+                            let error_stats = FeedStats::from_error("parse_error", &e.to_string())
+                                .with_feed_info(&feed.id, &feed.name);
+                            let _ = append_record(&output_file, &error_stats);
+                        }
+                    },
                     Err(e) => {
                         eprintln!("✗ Failed to fetch feed {}: {}", feed.id, e);
                         let error_stats = FeedStats::from_error("fetch_error", &e.to_string())
@@ -225,6 +256,9 @@ async fn consume_all_feeds(output_dir: &str, concurrency: usize, sample_rate: u6
         }
     }
 
-    println!("\nFinished processing all feeds. Results saved to {}/", output_dir);
+    println!(
+        "\nFinished processing all feeds. Results saved to {}/",
+        output_dir
+    );
     Ok(())
 }

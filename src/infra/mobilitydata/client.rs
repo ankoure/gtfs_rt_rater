@@ -52,7 +52,11 @@ impl MobilityDataClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(anyhow::anyhow!("Token exchange failed with status {}: {}", status, body));
+            return Err(anyhow::anyhow!(
+                "Token exchange failed with status {}: {}",
+                status,
+                body
+            ));
         }
 
         let token_response: TokenResponse = response
@@ -101,12 +105,22 @@ impl CatalogApi for MobilityDataClient {
             .filter_map(|item| {
                 let id = item["id"].as_str()?.to_string();
                 let name = item["provider"].as_str().unwrap_or("").to_string();
-                let url = item["source_info"]["producer_url"].as_str().map(|s| s.to_string());
-                let auth_type = item["source_info"]["authentication_type"].as_i64().unwrap_or(0);
+                let url = item["source_info"]["producer_url"]
+                    .as_str()
+                    .map(|s| s.to_string());
+                let auth_type = item["source_info"]["authentication_type"]
+                    .as_i64()
+                    .unwrap_or(0);
                 let requires_auth = auth_type != 0;
                 let status = item["status"].as_str().map(|s| s.to_string());
 
-                Some(Feed { id, name, url, requires_auth, status })
+                Some(Feed {
+                    id,
+                    name,
+                    url,
+                    requires_auth,
+                    status,
+                })
             })
             .collect();
 

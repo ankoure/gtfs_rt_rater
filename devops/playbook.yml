@@ -60,12 +60,14 @@
     - name: build rust application
       shell: |
         . $HOME/.cargo/env
-        cargo build --release
+        cargo build --release --jobs 1
       args:
         chdir: /home/ubuntu/gtfs_rt_rater
         executable: /bin/bash
       async: 1800
       poll: 30
+      environment:
+        CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
     - name: Make sure a service unit is running and enabled
       become: yes

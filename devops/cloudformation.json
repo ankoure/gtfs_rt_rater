@@ -104,13 +104,140 @@
         "GroupName": {
           "Fn::Sub": "gtfs-rt-rater-securitygroup"
         },
-        "GroupDescription": "Allow SSH inbound and outbound traffic",
+        "GroupDescription": "Allow SSH from GitHub Actions runners only",
         "SecurityGroupIngress": [
           {
             "IpProtocol": "tcp",
             "FromPort": 22,
             "ToPort": 22,
-            "CidrIp": "0.0.0.0/0"
+            "CidrIp": "4.148.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "4.149.0.0/17",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "4.150.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "4.151.0.0/17",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "13.64.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "13.65.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "13.104.0.0/14",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "20.20.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "20.21.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "20.26.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "20.96.0.0/12",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "20.112.0.0/13",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "40.64.0.0/13",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "40.74.0.0/15",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "40.80.0.0/12",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "51.104.0.0/15",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "52.224.0.0/12",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "135.225.0.0/16",
+            "Description": "GitHub Actions"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "143.64.0.0/13",
+            "Description": "GitHub Actions"
           }
         ]
       }

@@ -29,45 +29,11 @@
         src: systemd.conf
         dest: /etc/systemd/system/gtfs-rt-rater.service
 
-    - name: install build dependencies
-      become: yes
-      become_user: root
-      apt:
-        name:
-          - build-essential
-          - pkg-config
-          - libssl-dev
-          - curl
-        state: latest
-
-    - name: check if rustup is installed
-      stat:
-        path: /home/ubuntu/.cargo/bin/rustup
-      register: rustup_installed
-
-    - name: install rustup
-      shell: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-      when: not rustup_installed.stat.exists
-
-    - name: update rust toolchain
-      shell: |
-        . $HOME/.cargo/env
-        rustup update stable
-        rustup default stable
-      args:
-        executable: /bin/bash
-
-    - name: build rust application
-      shell: |
-        . $HOME/.cargo/env
-        cargo build --release --jobs 1
-      args:
-        chdir: /home/ubuntu/gtfs_rt_rater
-        executable: /bin/bash
-      async: 1800
-      poll: 30
-      environment:
-        CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    - name: copy pre-built binary
+      copy:
+        src: artifacts/gtfs_rt_rater
+        dest: /home/ubuntu/gtfs_rt_rater/gtfs_rt_rater
+        mode: '0755'
 
     - name: Make sure a service unit is running and enabled
       become: yes

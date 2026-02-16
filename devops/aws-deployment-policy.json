@@ -20,9 +20,7 @@
         "cloudformation:DeleteChangeSet",
         "cloudformation:GetTemplateSummary"
       ],
-      "Resource": [
-        "arn:aws:cloudformation:us-east-1:*:stack/gtfs-rt-rater/*"
-      ]
+      "Resource": ["arn:aws:cloudformation:us-east-1:*:stack/gtfs-rt-rater/*"]
     },
     {
       "Sid": "IAMPermissions",
@@ -97,29 +95,25 @@
     {
       "Sid": "S3BucketPermissions",
       "Effect": "Allow",
-      "Action": [
-        "s3:ListBucket",
-        "s3:GetBucketLocation"
-      ],
-      "Resource": "arn:aws:s3:::gtfs-rt-feeds"
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": [
+        "arn:aws:s3:::gtfs-rt-feeds",
+        "arn:aws:s3:::gtfs-rt-ssm-logs"
+      ]
     },
     {
       "Sid": "S3ObjectPermissions",
       "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject",
-        "s3:DeleteObject"
-      ],
-      "Resource": "arn:aws:s3:::gtfs-rt-feeds/*"
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::gtfs-rt-feeds/*",
+        "arn:aws:s3:::gtfs-rt-ssm-logs/*"
+      ]
     },
     {
       "Sid": "SSMParameterPermissions",
       "Effect": "Allow",
-      "Action": [
-        "ssm:GetParameters",
-        "ssm:GetParameter"
-      ],
+      "Action": ["ssm:GetParameters", "ssm:GetParameter"],
       "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/canonical/ubuntu/*"
     },
     {

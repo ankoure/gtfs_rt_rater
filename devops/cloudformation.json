@@ -11,7 +11,9 @@
               "Action": ["s3:GetObject", "s3:PutObject"],
               "Resource": [
                 "arn:aws:s3:::gtfs-rt-feeds",
-                "arn:aws:s3:::gtfs-rt-feeds/*"
+                "arn:aws:s3:::gtfs-rt-feeds/*",
+                "arn:aws:s3:::gtfs-rt-ssm-logs",
+                "arn:aws:s3:::gtfs-rt-ssm-logs/*"
               ]
             },
             {
@@ -19,7 +21,7 @@
               "Action": "s3:ListBucket",
               "Resource": [
                 "arn:aws:s3:::gtfs-rt-feeds",
-                "arn:aws:s3:::gtfs-rt-feeds/*"
+                "arn:aws:s3:::gtfs-rt-ssm-logs"
               ]
             }
           ]

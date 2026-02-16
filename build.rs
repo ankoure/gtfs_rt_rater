@@ -7,10 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::set_var("PROTOC", protoc_path);
     }
 
-    prost_build::compile_protos(
-        &["proto/gtfs-realtime.proto"],
-        &["proto/"],
-    )?;
+    prost_build::compile_protos(&["proto/gtfs-realtime.proto"], &["proto/"])?;
 
     Ok(())
 }

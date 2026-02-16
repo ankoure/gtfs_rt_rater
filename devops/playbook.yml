@@ -64,6 +64,8 @@
       args:
         chdir: /home/ubuntu/gtfs_rt_rater
         executable: /bin/bash
+      async: 1800
+      poll: 30
 
     - name: Make sure a service unit is running and enabled
       become: yes

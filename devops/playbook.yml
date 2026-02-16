@@ -3,6 +3,33 @@
   hosts: all
   remote_user: ubuntu
   become_user: ubuntu
+  vars:
+    ansible_connection: aws_ssm
+    ansible_aws_ssm_bucket_name: gtfs-rt-ssm-logs
+    ansible_aws_ssm_region: us-east-1
+    datadog_api_key: "{{ lookup('env', 'DD_API_KEY') }}"
+    datadog_site: "datadoghq.com"
+    git_sha: "{{ lookup('env', 'GIT_SHA') }}"
+    datadog_config:
+      tags:
+        - "git.repository_url:github.com/ankoure/gtfs_rt_rater"
+        - "git.commit.sha:{{ lookup('env', 'GIT_SHA') }}"
+        - "version:{{ lookup('env', 'GIT_SHA') }}"
+      apm_config:
+        enabled: true
+      process_config:
+        enabled: "true" # type: string
+      logs_enabled: true
+    network_config:
+      enabled: true
+    system_probe_config:
+      enable_oom_kill: true
+    datadog_checks:
+      systemd:
+        init_config:
+        instances:
+          - unit_names:
+              - gtfs-rt-rater.service
   tasks:
     - name: get latest github repo
       git:
@@ -50,28 +77,3 @@
         state: restarted
         daemon_reload: true
         name: gtfs-rt-rater
-
-  vars:
-    datadog_api_key: "{{ lookup('env', 'DD_API_KEY') }}"
-    datadog_site: "datadoghq.com"
-    git_sha: "{{ lookup('env', 'GIT_SHA') }}"
-    datadog_config:
-      tags:
-        - "git.repository_url:github.com/ankoure/gtfs_rt_rater"
-        - "git.commit.sha:{{ lookup('env', 'GIT_SHA') }}"
-        - "version:{{ lookup('env', 'GIT_SHA') }}"
-      apm_config:
-        enabled: true
-      process_config:
-        enabled: "true" # type: string
-      logs_enabled: true
-    network_config:
-      enabled: true
-    system_probe_config:
-      enable_oom_kill: true
-    datadog_checks:
-      systemd:
-        init_config:
-        instances:
-          - unit_names:
-              - gtfs-rt-rater.service

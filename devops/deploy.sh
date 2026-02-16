@@ -29,13 +29,14 @@ aws cloudformation deploy --stack-name $STACK_NAME \
     --no-fail-on-empty-changeset
 
 # Look up the physical ID of the EC2 instance currently associated with the stack
-INSTANCE_PHYSICAL_ID=""
-INSTANCE_PHYSICAL_ID=$(aws cloudformation list-stack-resources --stack-name $STACK_NAME --query "StackResourceSummaries[?LogicalResourceId=='GtfsRtInstance'].PhysicalResourceId" --output text)
-# Look up the hostname of the instance by physical ID
-INSTANCE_HOSTNAME=""
-INSTANCE_HOSTNAME=$(aws ec2 describe-instances --instance-ids $INSTANCE_PHYSICAL_ID --query "Reservations[*].Instances[*].PublicDnsName" --output text)
+INSTANCE_ID=""
+INSTANCE_ID=$(aws cloudformation list-stack-resources --stack-name $STACK_NAME --query "StackResourceSummaries[?LogicalResourceId=='GtfsRtInstance'].PhysicalResourceId" --output text)
 
-# Run the playbook! :-)
-export ANSIBLE_HOST_KEY_CHECKING=False # If it's a new host, ssh known_hosts not having the key fingerprint will cause an error. Silence it
+# Wait for SSM agent to be ready
+echo "Waiting for SSM agent to be ready on instance $INSTANCE_ID..."
+aws ssm wait instance-information-available --instance-id $INSTANCE_ID || echo "SSM agent may not be fully ready, attempting connection anyway"
+
+# Run the playbook using AWS Systems Manager Session Manager
 ansible-galaxy collection install datadog.dd
-ansible-playbook -v -i $INSTANCE_HOSTNAME, -u ubuntu --private-key ~/.ssh/gtfs-rt-rater.pem playbook.yml
+ansible-galaxy collection install amazon.aws
+ansible-playbook -v -i $INSTANCE_ID, playbook.yml

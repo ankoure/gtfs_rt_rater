@@ -117,6 +117,27 @@
       "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/canonical/ubuntu/*"
     },
     {
+      "Sid": "SSMSessionStartPermissions",
+      "Effect": "Allow",
+      "Action": ["ssm:StartSession"],
+      "Resource": [
+        "arn:aws:ec2:us-east-1:081194948292:instance/*",
+        "arn:aws:ssm:us-east-1:081194948292:document/SSM-SessionManagerRunShell"
+      ]
+    },
+    {
+      "Sid": "SSMSessionManagePermissions",
+      "Effect": "Allow",
+      "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
+      "Resource": "arn:aws:ssm:us-east-1:081194948292:session/*"
+    },
+    {
+      "Sid": "SSMSessionReadPermissions",
+      "Effect": "Allow",
+      "Action": ["ssm:DescribeSessions", "ssm:GetConnectionStatus"],
+      "Resource": "*"
+    },
+    {
       "Sid": "CloudWatchAlarmPermissions",
       "Effect": "Allow",
       "Action": [

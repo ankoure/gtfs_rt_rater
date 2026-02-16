@@ -68,7 +68,9 @@
     "GtfsRtInstance": {
       "Type": "AWS::EC2::Instance",
       "Properties": {
-        "ImageId": "ami-0feba2720136a0493",
+        "ImageId": {
+          "Fn::Sub": "{{resolve:ssm:/aws/service/canonical/ubuntu/server/22.04/stable/current/arm64/hvm/ebs-gp2/ami-id}}"
+        },
         "InstanceType": "t4g.small",
         "KeyName": "gtfs-rt-rater",
         "IamInstanceProfile" : {
@@ -109,6 +111,106 @@
         },
         "GroupDescription": "Security group for gtfs-rt-rater - no inbound SSH required (using SSM)",
         "SecurityGroupIngress": []
+      }
+    },
+    "InstanceStatusCheckAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "gtfs-rt-rater-instance-status-check-failed",
+        "AlarmDescription": "Alert when EC2 instance status checks fail",
+        "MetricName": "StatusCheckFailed",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Maximum",
+        "Period": 60,
+        "EvaluationPeriods": 2,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "GtfsRtInstance"
+            }
+          }
+        ],
+        "TreatMissingData": "breaching"
+      }
+    },
+    "HighCPUAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "gtfs-rt-rater-high-cpu",
+        "AlarmDescription": "Alert when CPU utilization is consistently high",
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 85,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "GtfsRtInstance"
+            }
+          }
+        ],
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "HighMemoryAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "gtfs-rt-rater-high-memory",
+        "AlarmDescription": "Alert when memory utilization is high",
+        "MetricName": "mem_used_percent",
+        "Namespace": "CWAgent",
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 85,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "GtfsRtInstance"
+            }
+          }
+        ],
+        "TreatMissingData": "notBreaching"
+      }
+    },
+    "DiskSpaceAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "gtfs-rt-rater-low-disk-space",
+        "AlarmDescription": "Alert when disk space is running low",
+        "MetricName": "disk_used_percent",
+        "Namespace": "CWAgent",
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "GtfsRtInstance"
+            }
+          },
+          {
+            "Name": "path",
+            "Value": "/"
+          },
+          {
+            "Name": "fstype",
+            "Value": "ext4"
+          }
+        ],
+        "TreatMissingData": "notBreaching"
       }
     }
   },

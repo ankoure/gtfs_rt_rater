@@ -55,12 +55,14 @@
       template:
         src: systemd.conf
         dest: /etc/systemd/system/gtfs-rt-rater.service
+      register: systemd_copy
 
     - name: copy pre-built binary
       copy:
         src: artifacts/gtfs_rt_rater
         dest: /home/ubuntu/gtfs_rt_rater/gtfs_rt_rater
         mode: '0755'
+      register: binary_copy
 
     - name: Make sure a service unit is running and enabled
       become: yes
@@ -70,10 +72,63 @@
         name: gtfs-rt-rater
         enabled: true
 
-    - name: Restart service
+    - name: Reload systemd daemon if service file changed
+      become: yes
+      become_user: root
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: systemd_copy.changed
+
+    - name: Restart service only if binary or systemd config changed
       become: yes
       become_user: root
       ansible.builtin.systemd_service:
         state: restarted
-        daemon_reload: true
         name: gtfs-rt-rater
+      when: binary_copy.changed or systemd_copy.changed
+      register: service_restarted
+
+    - name: Wait for service to be active
+      become: yes
+      become_user: root
+      ansible.builtin.systemd_service:
+        name: gtfs-rt-rater
+      register: service_status
+      until: service_status.status.ActiveState == "active"
+      retries: 10
+      delay: 3
+      when: service_restarted.changed
+
+    - name: Verify service is running (not failed)
+      become: yes
+      become_user: root
+      ansible.builtin.systemd_service:
+        name: gtfs-rt-rater
+      register: service_check
+      failed_when: service_check.status.ActiveState != "active"
+      when: service_restarted.changed
+
+    - name: Check service has been running for at least 10 seconds
+      pause:
+        seconds: 10
+      when: service_restarted.changed
+
+    - name: Final health check - ensure service didn't crash
+      become: yes
+      become_user: root
+      ansible.builtin.systemd_service:
+        name: gtfs-rt-rater
+      register: final_check
+      failed_when: final_check.status.ActiveState != "active"
+      when: service_restarted.changed
+
+    - name: Display service status
+      become: yes
+      become_user: root
+      ansible.builtin.systemd_service:
+        name: gtfs-rt-rater
+      register: current_status
+
+    - name: Show deployment result
+      debug:
+        msg: "{{ 'Service restarted and healthy - Running since ' + current_status.status.ActiveEnterTimestamp if service_restarted.changed else 'No changes detected - Service already running since ' + current_status.status.ActiveEnterTimestamp }}"

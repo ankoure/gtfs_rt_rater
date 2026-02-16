@@ -48,13 +48,19 @@
         "iam:ListPolicyVersions",
         "iam:PassRole",
         "iam:TagRole",
+        "iam:UntagRole",
         "iam:TagInstanceProfile",
-        "iam:TagPolicy"
+        "iam:UntagInstanceProfile",
+        "iam:TagPolicy",
+        "iam:UntagPolicy",
+        "iam:ListRoleTags",
+        "iam:ListInstanceProfileTags",
+        "iam:ListPolicyTags"
       ],
       "Resource": [
-        "arn:aws:iam::*:role/gtfs-rt-rater-*",
-        "arn:aws:iam::*:instance-profile/gtfs-rt-rater-*",
-        "arn:aws:iam::*:policy/gtfs-rt-rater-*"
+        "arn:aws:iam::081194948292:role/gtfs-rt-rater-*",
+        "arn:aws:iam::081194948292:instance-profile/gtfs-rt-rater-*",
+        "arn:aws:iam::081194948292:policy/gtfs-rt-rater-*"
       ]
     },
     {

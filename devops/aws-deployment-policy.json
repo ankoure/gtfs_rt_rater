@@ -17,7 +17,8 @@
         "cloudformation:CreateChangeSet",
         "cloudformation:ExecuteChangeSet",
         "cloudformation:DescribeChangeSet",
-        "cloudformation:DeleteChangeSet"
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:GetTemplateSummary"
       ],
       "Resource": [
         "arn:aws:cloudformation:us-east-1:*:stack/gtfs-rt-rater/*"

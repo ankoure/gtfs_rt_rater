@@ -112,6 +112,25 @@
         "s3:DeleteObject"
       ],
       "Resource": "arn:aws:s3:::gtfs-rt-feeds/*"
+    },
+    {
+      "Sid": "SSMParameterPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameters",
+        "ssm:GetParameter"
+      ],
+      "Resource": "arn:aws:ssm:us-east-1::parameter/aws/service/canonical/ubuntu/*"
+    },
+    {
+      "Sid": "CloudWatchAlarmPermissions",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "arn:aws:cloudwatch:us-east-1:081194948292:alarm:gtfs-rt-rater-*"
     }
   ]
 }

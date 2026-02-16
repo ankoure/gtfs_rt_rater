@@ -51,16 +51,19 @@
 
     - name: update rust toolchain
       shell: |
-        source $HOME/.cargo/env
+        . $HOME/.cargo/env
         rustup update stable
         rustup default stable
+      args:
+        executable: /bin/bash
 
     - name: build rust application
       shell: |
-        source $HOME/.cargo/env
+        . $HOME/.cargo/env
         cargo build --release
       args:
         chdir: /home/ubuntu/gtfs_rt_rater
+        executable: /bin/bash
 
     - name: Make sure a service unit is running and enabled
       become: yes

@@ -34,7 +34,14 @@ INSTANCE_ID=$(aws cloudformation list-stack-resources --stack-name $STACK_NAME -
 
 # Wait for SSM agent to be ready
 echo "Waiting for SSM agent to be ready on instance $INSTANCE_ID..."
-aws ssm wait instance-information-available --instance-id $INSTANCE_ID || echo "SSM agent may not be fully ready, attempting connection anyway"
+for i in {1..30}; do
+  if aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null | grep -q "Online"; then
+    echo "SSM agent is online"
+    break
+  fi
+  echo "Waiting for SSM agent... (attempt $i/30)"
+  sleep 10
+done
 
 # Run the playbook using AWS Systems Manager Session Manager
 ansible-galaxy collection install datadog.dd

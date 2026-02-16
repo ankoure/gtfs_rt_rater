@@ -38,9 +38,10 @@ jobs:
           cat >> ./devops/.env << EOF
           MOBILITYDATA_REFRESH_TOKEN=${{ secrets.MOBILITYDATA_REFRESH_TOKEN }}
           EOF
-      - name: Install Session Manager plugin
+      - name: Install Session Manager plugin and boto3
         run: |
           curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
           sudo dpkg -i session-manager-plugin.deb
+          pip install boto3 botocore
       - name: Run deploy shell script
         run: cd devops && bash ./deploy.sh

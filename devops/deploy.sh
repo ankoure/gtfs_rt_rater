@@ -44,6 +44,9 @@ for i in {1..30}; do
 done
 
 # Run the playbook using AWS Systems Manager Session Manager
-ansible-galaxy collection install datadog.dd
-ansible-galaxy collection install amazon.aws
-ansible-playbook -v -i $INSTANCE_ID, playbook.yml
+# Install collections
+ansible-galaxy collection install -r requirements.yml
+
+# Run playbook over SSM
+ansible-playbook -v -i $INSTANCE_ID, playbook.yml \
+  -e ansible_connection=amazon.aws.aws_ssm

@@ -30,7 +30,7 @@
           - unit_names:
               - gtfs-rt-rater.service
   tasks:
-    - name: Ensure app directory exists
+    - name: Ensure base  directory exists
       become: yes
       file:
         path: /home/ubuntu/gtfs_rt_rater
@@ -38,31 +38,20 @@
         owner: ubuntu
         group: ubuntu
         mode: "0755"
-    - name: get latest github repo
-      become: yes
-      become_user: ubuntu
-      git:
-        repo: https://github.com/ankoure/gtfs_rt_rater.git
-        dest: /home/ubuntu/gtfs_rt_rater
-        version: master
-        force: yes
-
+   
     - name: Install the Datadog Agent
       become: yes
-      become_user: root
       import_role:
         name: datadog.dd.agent
 
     - name: copy env file
       become: yes
-      become_user: ubuntu
       copy:
         src: .env
         dest: /home/ubuntu/gtfs_rt_rater/.env
         mode: "0644"
 
     - name: copy systemd service file
-      become: yes
       become_user: root
       template:
         src: systemd.conf
@@ -70,7 +59,6 @@
       register: systemd_copy
 
     - name: copy pre-built binary
-      become: yes
       copy:
         src: artifacts/gtfs_rt_rater
         dest: /home/ubuntu/gtfs_rt_rater/gtfs_rt_rater
@@ -81,14 +69,12 @@
 
     - name: Reload systemd daemon if service file changed
       become: yes
-      become_user: root
       ansible.builtin.systemd:
         daemon_reload: true
       when: systemd_copy.changed
 
     - name: Make sure a service unit is running and enabled
       become: yes
-      become_user: root
       ansible.builtin.systemd_service:
         state: started
         name: gtfs-rt-rater
@@ -96,7 +82,6 @@
 
     - name: Restart service only if binary or systemd config changed
       become: yes
-      become_user: root
       ansible.builtin.systemd_service:
         state: restarted
         name: gtfs-rt-rater
@@ -105,7 +90,6 @@
 
     - name: Wait for service to be active
       become: yes
-      become_user: root
       ansible.builtin.systemd_service:
         name: gtfs-rt-rater
       register: service_status
@@ -116,7 +100,6 @@
 
     - name: Verify service is running (not failed)
       become: yes
-      become_user: root
       ansible.builtin.systemd_service:
         name: gtfs-rt-rater
       register: service_check
@@ -130,7 +113,6 @@
 
     - name: Final health check - ensure service didn't crash
       become: yes
-      become_user: root
       ansible.builtin.systemd_service:
         name: gtfs-rt-rater
       register: final_check
@@ -139,7 +121,6 @@
 
     - name: Display service status
       become: yes
-      become_user: root
       ansible.builtin.systemd_service:
         name: gtfs-rt-rater
       register: current_status

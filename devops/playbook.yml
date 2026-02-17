@@ -17,7 +17,7 @@
       apm_config:
         enabled: true
       process_config:
-        enabled: "true" # type: string
+        enabled: "true"
       logs_enabled: true
     network_config:
       enabled: true
@@ -29,8 +29,9 @@
         instances:
           - unit_names:
               - gtfs-rt-rater.service
+
   tasks:
-    - name: Ensure base  directory exists
+    - name: Ensure base directory exists
       become: yes
       file:
         path: /home/ubuntu/gtfs_rt_rater
@@ -38,7 +39,7 @@
         owner: ubuntu
         group: ubuntu
         mode: "0755"
-   
+
     - name: Install the Datadog Agent
       become: yes
       import_role:
@@ -49,16 +50,22 @@
       copy:
         src: .env
         dest: /home/ubuntu/gtfs_rt_rater/.env
+        owner: ubuntu
+        group: ubuntu
         mode: "0644"
 
     - name: copy systemd service file
-      become_user: root
-      template:
+      become: yes
+      copy:
         src: systemd.conf
         dest: /etc/systemd/system/gtfs-rt-rater.service
+        owner: root
+        group: root
+        mode: "0644"
       register: systemd_copy
 
     - name: copy pre-built binary
+      become: yes
       copy:
         src: artifacts/gtfs_rt_rater
         dest: /home/ubuntu/gtfs_rt_rater/gtfs_rt_rater

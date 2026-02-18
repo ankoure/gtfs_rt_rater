@@ -32,17 +32,6 @@ aws cloudformation deploy --stack-name $STACK_NAME \
 INSTANCE_ID=""
 INSTANCE_ID=$(aws cloudformation list-stack-resources --stack-name $STACK_NAME --query "StackResourceSummaries[?LogicalResourceId=='GtfsRtInstance'].PhysicalResourceId" --output text)
 
-# Wait for SSM agent to be ready
-echo "Waiting for SSM agent to be ready on instance $INSTANCE_ID..."
-for i in {1..30}; do
-  if aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null | grep -q "Online"; then
-    echo "SSM agent is online"
-    break
-  fi
-  echo "Waiting for SSM agent... (attempt $i/30)"
-  sleep 10
-done
-
 # Run the playbook using AWS Systems Manager Session Manager
 # Install collections
 ansible-galaxy collection install -r requirements.yml

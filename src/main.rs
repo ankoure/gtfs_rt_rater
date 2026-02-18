@@ -12,11 +12,11 @@ use anyhow::Result;
 use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
 use clap::{Parser, Subcommand};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use gtfs_rt_rater::analyzers::analyzer::{analyze, analyze_for_date};
 use gtfs_rt_rater::{
-    fetch::{fetch_bytes, BasicClient},
+    fetch::{BasicClient, fetch_bytes},
     output::append_record,
     parser::parse_feed,
     stats::FeedStats,
@@ -272,8 +272,14 @@ async fn consume_all_feeds(
                         let output_dir = output_dir.to_string();
                         tokio::spawn(async move {
                             info!("\n=== Uploading previous day's files to S3 ===");
-                            if let Err(e) =
-                                upload_previous_day_files(&s3, &bucket, &output_dir, yesterday, gzip).await
+                            if let Err(e) = upload_previous_day_files(
+                                &s3,
+                                &bucket,
+                                &output_dir,
+                                yesterday,
+                                gzip,
+                            )
+                            .await
                             {
                                 error!("Failed to upload previous day's files: {}", e);
                             } else {
@@ -286,7 +292,9 @@ async fn consume_all_feeds(
                             {
                                 error!("Failed to aggregate previous day's data: {}", e);
                             } else {
-                                info!("✓ Successfully aggregated and cleaned up previous day's data");
+                                info!(
+                                    "✓ Successfully aggregated and cleaned up previous day's data"
+                                );
                             }
                         });
 

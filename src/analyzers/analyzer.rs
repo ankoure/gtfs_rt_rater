@@ -162,7 +162,11 @@ pub async fn analyze_for_date(
     Ok(())
 }
 
-fn load_feed_rows_for_date(base_dir: &str, feed_id: &str, date_str: &str) -> Result<Vec<FeedStats>> {
+fn load_feed_rows_for_date(
+    base_dir: &str,
+    feed_id: &str,
+    date_str: &str,
+) -> Result<Vec<FeedStats>> {
     let csv_path = format!("{}/agency_id={}/date={}.csv", base_dir, feed_id, date_str);
     let path = std::path::Path::new(&csv_path);
 

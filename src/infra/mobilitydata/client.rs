@@ -15,12 +15,17 @@ struct TokenResponse {
     access_token: String,
 }
 
+/// Client for the [MobilityData API](https://api.mobilitydatabase.org).
+///
+/// Authenticates via a refresh token exchange and provides access to
+/// the GTFS-RT feed catalog.
 pub struct MobilityDataClient {
     base_url: String,
     access_token: String,
 }
 
 impl MobilityDataClient {
+    /// Creates a new client by exchanging the given refresh token for an access token.
     pub async fn new(refresh_token: String) -> Result<Self> {
         // Exchange refresh token for access token
         let access_token = Self::exchange_token(&refresh_token).await?;

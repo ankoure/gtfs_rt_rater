@@ -1,8 +1,19 @@
+//! Per-sample statistics extracted from a single GTFS-RT feed snapshot.
+//!
+//! [`FeedStats`] counts how many vehicle entities include each optional field
+//! (bearing, speed, occupancy, etc.), providing a completeness profile for a
+//! single point-in-time observation.
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::gtfs_rt::FeedMessage;
 
+/// Statistics captured from a single GTFS-RT feed snapshot.
+///
+/// Each `with_*` field counts how many vehicle entities in the feed
+/// populated that optional field. These counts are later used by the
+/// [`analyzers`](crate::analyzers) module to compute support percentages and grades.
 #[derive(Debug, Default, Serialize)]
 pub struct FeedStats {
     pub timestamp: DateTime<Utc>,
@@ -40,6 +51,7 @@ pub struct FeedStats {
 }
 
 impl FeedStats {
+    /// Extracts field-completeness statistics from a parsed [`FeedMessage`].
     pub fn from_feed(feed: &FeedMessage) -> Self {
         let mut s = FeedStats {
             timestamp: Utc::now(),
@@ -157,6 +169,7 @@ impl FeedStats {
         s
     }
 
+    /// Computes a percentage from a part and total, returning 0.0 when total is zero.
     pub fn pct(part: usize, total: usize) -> f64 {
         if total == 0 {
             0.0
@@ -165,6 +178,7 @@ impl FeedStats {
         }
     }
 
+    /// Returns the percentage of vehicles that include bearing data.
     pub fn bearing_pct(&self) -> f64 {
         Self::pct(self.with_bearing, self.vehicles)
     }

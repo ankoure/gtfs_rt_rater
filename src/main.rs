@@ -1,3 +1,8 @@
+//! CLI entry point for the GTFS-RT Rater tool.
+//!
+//! Provides subcommands for analyzing individual feeds, consuming all public
+//! feeds from MobilityData, aggregating results, and uploading to S3.
+
 mod infra;
 mod services;
 
@@ -7,15 +12,16 @@ use anyhow::Result;
 use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
 use clap::{Parser, Subcommand};
-use flate2::Compression;
 use flate2::write::GzEncoder;
+use flate2::Compression;
+use gtfs_rt_rater::analyzers::analyzer::{analyze, analyze_for_date};
 use gtfs_rt_rater::{
-    fetch::{BasicClient, fetch_bytes},
-    output::{append_record, print_pretty},
+    fetch::{fetch_bytes, BasicClient},
+    output::append_record,
     parser::parse_feed,
     stats::FeedStats,
 };
-use log::{error, info, warn};
+use log::{error, info};
 use std::io::Write;
 
 #[derive(Parser)]
@@ -37,6 +43,16 @@ enum Commands {
         /// CSV file to append results to
         #[arg(short, long, default_value = "data.csv")]
         output: String,
+    },
+    /// Aggregate all feed CSVs and upload results to S3
+    Aggregate {
+        /// Directory containing CSVs to aggregate
+        #[arg(short = 'd', long, default_value = "feeds")]
+        output_dir: String,
+
+        /// S3 bucket name to upload aggregated JSON to (e.g., "my-bucket")
+        #[arg(long)]
+        s3_bucket: String,
     },
     /// List available feeds from MobilityData
     ListFeeds {
@@ -85,8 +101,17 @@ async fn main() -> Result<()> {
             let feed = parse_feed(&bytes)?;
             let stats = FeedStats::from_feed(&feed);
 
-            print_pretty(&stats);
             append_record(&output, &stats)?;
+        }
+        Commands::Aggregate {
+            output_dir,
+            s3_bucket,
+        } => {
+            if s3_bucket.is_empty() {
+                info!("S3 bucket is empty, skipping upload");
+            } else {
+                analyze(&s3_bucket, &output_dir).await?;
+            }
         }
         Commands::ListFeeds {
             vehicle_positions: _,
@@ -154,6 +179,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+/// Loads feed data from a local file path or fetches it over HTTP.
 async fn fetcher(url: &String) -> Result<Vec<u8>> {
     let bytes = if url.starts_with("http") {
         let client = BasicClient::new();
@@ -164,6 +190,8 @@ async fn fetcher(url: &String) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// Fetches all public GTFS-RT feeds concurrently, collecting samples at a
+/// configurable interval and optionally uploading previous-day results to S3.
 async fn consume_all_feeds(
     output_dir: &str,
     concurrency: usize,
@@ -239,15 +267,30 @@ async fn consume_all_feeds(
                 // Upload previous day's files if we haven't uploaded today yet
                 if last_upload_date.is_none() || last_upload_date.unwrap() < today {
                     if let Some(yesterday) = today.pred_opt() {
-                        info!("\n=== Uploading previous day's files to S3 ===");
-                        if let Err(e) =
-                            upload_previous_day_files(s3, bucket, output_dir, yesterday, gzip).await
-                        {
-                            error!("Failed to upload previous day's files: {}", e);
-                        } else {
-                            info!("✓ Successfully uploaded previous day's files");
-                            last_upload_date = Some(today);
-                        }
+                        let s3 = s3.clone();
+                        let bucket = bucket.to_string();
+                        let output_dir = output_dir.to_string();
+                        tokio::spawn(async move {
+                            info!("\n=== Uploading previous day's files to S3 ===");
+                            if let Err(e) =
+                                upload_previous_day_files(&s3, &bucket, &output_dir, yesterday, gzip).await
+                            {
+                                error!("Failed to upload previous day's files: {}", e);
+                            } else {
+                                info!("✓ Successfully uploaded previous day's files");
+                            }
+
+                            info!("\n=== Aggregating previous day's data ===");
+                            if let Err(e) =
+                                analyze_for_date(&s3, &bucket, &output_dir, yesterday).await
+                            {
+                                error!("Failed to aggregate previous day's data: {}", e);
+                            } else {
+                                info!("✓ Successfully aggregated and cleaned up previous day's data");
+                            }
+                        });
+
+                        last_upload_date = Some(today);
                     }
                 }
             }
@@ -277,20 +320,18 @@ async fn consume_all_feeds(
 
                 let http_client = BasicClient::new();
 
-                // Create daily file path based on UTC date
+                // Create agency directory with date-based CSV files
                 let now = Utc::now();
-                let year = now.format("%Y").to_string();
-                let month = now.format("%m").to_string();
-                let day = now.format("%d").to_string();
-                let daily_dir = format!("{}/Year={}/Month={}/Day={}", output_dir, year, month, day);
+                let date = now.format("%Y-%m-%d").to_string();
+                let agency_dir = format!("{}/agency_id={}", output_dir, feed.id);
 
                 // Create directory structure if it doesn't exist
-                if let Err(e) = std::fs::create_dir_all(&daily_dir) {
-                    error!("Failed to create directory {}: {}", daily_dir, e);
+                if let Err(e) = std::fs::create_dir_all(&agency_dir) {
+                    error!("Failed to create directory {}: {}", agency_dir, e);
                     return;
                 }
 
-                let output_file = format!("{}/{}.csv", daily_dir, feed.id);
+                let output_file = format!("{}/date={}.csv", agency_dir, date);
 
                 match fetch_bytes(&http_client, url).await {
                     Ok(bytes) => match parse_feed(&bytes) {
@@ -341,6 +382,7 @@ async fn consume_all_feeds(
     Ok(())
 }
 
+/// Uploads CSV files from the previous day to S3, optionally gzip-compressing them.
 async fn upload_previous_day_files(
     client: &aws_sdk_s3::Client,
     bucket: &str,
@@ -348,33 +390,33 @@ async fn upload_previous_day_files(
     date: chrono::NaiveDate,
     gzip: bool,
 ) -> Result<()> {
-    let year = date.format("%Y").to_string();
-    let month = date.format("%m").to_string();
-    let day = date.format("%d").to_string();
+    let date_str = date.format("%Y-%m-%d").to_string();
+    let target_filename = format!("date={}.csv", date_str);
 
-    let daily_dir = format!("{}/Year={}/Month={}/Day={}", output_dir, year, month, day);
-
-    // Check if directory exists
-    if !std::path::Path::new(&daily_dir).exists() {
-        warn!(
-            "No directory found for {}-{}-{}, skipping upload",
-            year, month, day
-        );
-        return Ok(());
-    }
-
-    // Read all CSV files in the directory
-    let entries = std::fs::read_dir(&daily_dir)?;
+    // Iterate over agency_id=* directories
+    let entries = std::fs::read_dir(output_dir)?;
     let mut upload_count = 0;
 
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
+    for agency_entry in entries {
+        let agency_entry = agency_entry?;
+        let agency_path = agency_entry.path();
 
-        // Only process .csv files
-        if path.extension().and_then(|s| s.to_str()) == Some("csv") {
-            let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        // Only process agency_id= directories
+        let dir_name = agency_entry.file_name();
+        let dir_name_str = dir_name.to_str().unwrap_or("");
+        if !agency_path.is_dir() || !dir_name_str.starts_with("agency_id=") {
+            continue;
+        }
 
+        let feed_id = &dir_name_str["agency_id=".len()..];
+        let csv_path = agency_path.join(&target_filename);
+
+        if !csv_path.exists() {
+            continue;
+        }
+
+        let path = csv_path;
+        {
             // Read the file
             let file_contents = std::fs::read(&path)?;
 
@@ -385,10 +427,10 @@ async fn upload_previous_day_files(
                 encoder.write_all(&file_contents)?;
                 let compressed = encoder.finish()?;
 
-                let key = format!("Year={}/Month={}/Day={}/{}.gz", year, month, day, file_name);
+                let key = format!("agency_id={}/{}.gz", feed_id, target_filename);
                 (compressed, key)
             } else {
-                let key = format!("Year={}/Month={}/Day={}/{}", year, month, day, file_name);
+                let key = format!("agency_id={}/{}", feed_id, target_filename);
                 (file_contents, key)
             };
 
@@ -405,9 +447,6 @@ async fn upload_previous_day_files(
         }
     }
 
-    info!(
-        "✓ Uploaded {} files for {}-{}-{}",
-        upload_count, year, month, day
-    );
+    info!("✓ Uploaded {} files for {}", upload_count, date_str);
     Ok(())
 }

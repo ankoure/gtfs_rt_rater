@@ -1,8 +1,15 @@
+//! Protobuf parser for GTFS Realtime feeds.
+
 use anyhow::Result;
 use prost::Message;
 
 use crate::gtfs_rt::FeedMessage;
 
+/// Decodes a protobuf-encoded GTFS-RT [`FeedMessage`] from raw bytes.
+///
+/// # Errors
+///
+/// Returns an error if the bytes are not valid protobuf for a `FeedMessage`.
 pub fn parse_feed(bytes: &[u8]) -> Result<FeedMessage> {
     Ok(FeedMessage::decode(bytes)?)
 }

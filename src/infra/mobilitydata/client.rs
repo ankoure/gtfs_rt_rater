@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::services::catalog_api::{CatalogApi, Feed};
+use crate::services::catalog_api::{CatalogApi, Feed, FeedAuth};
 
 #[derive(Serialize)]
 struct TokenRequest {
@@ -116,14 +116,24 @@ impl CatalogApi for MobilityDataClient {
                 let auth_type = item["source_info"]["authentication_type"]
                     .as_i64()
                     .unwrap_or(0);
-                let requires_auth = auth_type != 0;
+                let param_name = item["source_info"]["api_key_parameter_name"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
+                let auth = match auth_type {
+                    1 => FeedAuth::UrlParam { param_name },
+                    2 => FeedAuth::Header {
+                        header_name: param_name,
+                    },
+                    _ => FeedAuth::None,
+                };
                 let status = item["status"].as_str().map(|s| s.to_string());
 
                 Some(Feed {
                     id,
                     name,
                     url,
-                    requires_auth,
+                    auth,
                     status,
                 })
             })

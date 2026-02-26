@@ -10,3 +10,12 @@ pub trait HttpClient: Send + Sync {
     /// Sends an HTTP request and returns the response.
     async fn execute(&self, req: Request) -> reqwest::Result<Response>;
 }
+
+/// Allows a `Box<dyn HttpClient>` to be passed wherever `HttpClient` is
+/// expected, enabling runtime-selected auth strategies.
+#[async_trait]
+impl HttpClient for Box<dyn HttpClient> {
+    async fn execute(&self, req: Request) -> reqwest::Result<Response> {
+        (**self).execute(req).await
+    }
+}

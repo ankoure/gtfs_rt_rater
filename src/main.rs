@@ -6,8 +6,9 @@
 mod infra;
 mod services;
 
+use crate::infra::keys::{FeedKeyConfig, KeyStore, SsmKeyStore};
 use crate::infra::mobilitydata::client::MobilityDataClient;
-use crate::services::catalog_api::CatalogApi;
+use crate::services::catalog_api::{CatalogApi, FeedAuth};
 use anyhow::Result;
 use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
@@ -16,7 +17,11 @@ use flate2::Compression;
 use flate2::write::GzEncoder;
 use gtfs_rt_rater::analyzers::analyzer::{analyze, analyze_for_date};
 use gtfs_rt_rater::{
-    fetch::{BasicClient, fetch_bytes},
+    fetch::{
+        BasicClient, HttpClient,
+        auth::{api_key::ApiKey, url_param::UrlParam},
+        fetch_bytes,
+    },
     output::append_record,
     parser::parse_feed,
     stats::FeedStats,
@@ -85,6 +90,13 @@ enum Commands {
         /// Optional: Gzip compress CSV files before uploading to S3
         #[arg(long, default_value_t = false)]
         gzip: bool,
+
+        /// Optional: path to a JSON file mapping feed IDs to SSM parameter paths
+        /// (e.g. {"mdb-123": "/gtfs/feeds/mdb-123/api_key"}).
+        /// When provided, authenticated feeds with a matching entry will be
+        /// included in the run.
+        #[arg(long)]
+        key_config: Option<String>,
     },
 }
 
@@ -126,7 +138,11 @@ async fn main() -> Result<()> {
 
             for feed in &feeds {
                 let status_str = feed.status.as_deref().unwrap_or("active");
-                let auth_str = if feed.requires_auth { "🔒" } else { "🔓" };
+                let auth_str = if feed.auth.requires_auth() {
+                    "🔒"
+                } else {
+                    "🔓"
+                };
                 let url_str = if feed.url.is_some() { "✓" } else { "✗" };
 
                 info!(
@@ -139,13 +155,15 @@ async fn main() -> Result<()> {
                 .iter()
                 .filter(|f| f.status.as_deref() == Some("deprecated"))
                 .count();
-            let auth_required = feeds.iter().filter(|f| f.requires_auth).count();
+            let auth_required = feeds.iter().filter(|f| f.auth.requires_auth()).count();
             let no_url = feeds.iter().filter(|f| f.url.is_none()).count();
 
             let processable = feeds
                 .iter()
                 .filter(|f| {
-                    !f.requires_auth && f.url.is_some() && f.status.as_deref() != Some("deprecated")
+                    !f.auth.requires_auth()
+                        && f.url.is_some()
+                        && f.status.as_deref() != Some("deprecated")
                 })
                 .count();
 
@@ -163,6 +181,7 @@ async fn main() -> Result<()> {
             num_samples,
             s3_bucket,
             gzip,
+            key_config,
         } => {
             consume_all_feeds(
                 &output_dir,
@@ -171,6 +190,7 @@ async fn main() -> Result<()> {
                 num_samples,
                 s3_bucket,
                 gzip,
+                key_config.as_deref(),
             )
             .await?;
         }
@@ -192,6 +212,10 @@ async fn fetcher(url: &String) -> Result<Vec<u8>> {
 
 /// Fetches all public GTFS-RT feeds concurrently, collecting samples at a
 /// configurable interval and optionally uploading previous-day results to S3.
+///
+/// If `key_config_path` is provided, feeds that require authentication are
+/// also included when a matching entry exists in the config file. Keys are
+/// resolved from SSM once at startup and cached for the duration of the run.
 async fn consume_all_feeds(
     output_dir: &str,
     concurrency: usize,
@@ -199,15 +223,18 @@ async fn consume_all_feeds(
     num_samples: usize,
     s3_bucket: Option<String>,
     gzip: bool,
+    key_config_path: Option<&str>,
 ) -> Result<()> {
     let refresh_token = std::env::var("MOBILITYDATA_REFRESH_TOKEN")
         .expect("MOBILITYDATA_REFRESH_TOKEN must be set");
     let client = MobilityDataClient::new(refresh_token).await?;
 
+    // Load AWS config once; reused for both S3 and SSM clients.
+    let aws_config = aws_config::load_from_env().await;
+
     // Initialize S3 client if bucket is provided
     let s3_client = if s3_bucket.is_some() {
-        let config = aws_config::load_from_env().await;
-        Some(aws_sdk_s3::Client::new(&config))
+        Some(aws_sdk_s3::Client::new(&aws_config))
     } else {
         None
     };
@@ -219,17 +246,54 @@ async fn consume_all_feeds(
     info!("Fetching feed list from MobilityData...");
     let feeds = client.list_feeds().await?;
 
-    // Filter feeds that don't require authentication, have a URL, and are not deprecated
-    let public_feeds: Vec<_> = feeds
+    // Optionally load the key config and resolve API keys from SSM upfront.
+    // Wrapped in Arc so spawned tasks can share without cloning the full map.
+    // The resolved map is keyed by feed_id and contains the plaintext API key.
+    let resolved_keys: std::sync::Arc<std::collections::HashMap<String, String>> =
+        std::sync::Arc::new(if let Some(path) = key_config_path {
+            let key_config = FeedKeyConfig::load(path)?;
+            let store = SsmKeyStore::new(&aws_config);
+
+            let mut map = std::collections::HashMap::new();
+            for (feed_id, reference) in key_config.iter() {
+                match store.get(reference).await {
+                    Ok(key) => {
+                        info!("✓ Resolved key for {feed_id} from SSM ({reference})");
+                        map.insert(feed_id.to_string(), key);
+                    }
+                    Err(e) => {
+                        error!("✗ Failed to resolve key for {feed_id} ({reference}): {e}");
+                    }
+                }
+            }
+            map
+        } else {
+            std::collections::HashMap::new()
+        });
+
+    // Include public feeds and any authenticated feeds for which we have a key.
+    let active_feeds: Vec<_> = feeds
         .into_iter()
         .filter(|f| {
-            !f.requires_auth && f.url.is_some() && f.status.as_deref() != Some("deprecated")
+            f.url.is_some()
+                && f.status.as_deref() != Some("deprecated")
+                && match &f.auth {
+                    FeedAuth::None => true,
+                    _ => resolved_keys.contains_key(&f.id),
+                }
         })
         .collect();
 
+    let auth_count = active_feeds
+        .iter()
+        .filter(|f| f.auth != FeedAuth::None)
+        .count();
+    let public_feeds = active_feeds; // rename for the rest of the function
+
     info!(
-        "Found {} public feeds to process (excluding deprecated)",
-        public_feeds.len()
+        "Found {} feeds to process ({} authenticated, excluding deprecated)",
+        public_feeds.len(),
+        auth_count,
     );
 
     if num_samples == 0 {
@@ -321,12 +385,32 @@ async fn consume_all_feeds(
             let output_dir = output_dir.to_string();
             let feed = feed.clone();
 
+            let resolved_keys = resolved_keys.clone();
             let task = tokio::spawn(async move {
                 let _permit = sem.acquire().await.unwrap();
 
                 let url = feed.url.as_ref().unwrap();
 
-                let http_client = BasicClient::new();
+                // Build the appropriate HTTP client for this feed's auth type.
+                let http_client: Box<dyn HttpClient> = match &feed.auth {
+                    FeedAuth::None => Box::new(BasicClient::new()),
+                    FeedAuth::Header { header_name } => {
+                        let key = resolved_keys[&feed.id].clone();
+                        Box::new(ApiKey {
+                            inner: BasicClient::new(),
+                            header_name: header_name.clone(),
+                            key,
+                        })
+                    }
+                    FeedAuth::UrlParam { param_name } => {
+                        let key = resolved_keys[&feed.id].clone();
+                        Box::new(UrlParam {
+                            inner: BasicClient::new(),
+                            param_name: param_name.clone(),
+                            key,
+                        })
+                    }
+                };
 
                 // Create agency directory with date-based CSV files
                 let now = Utc::now();

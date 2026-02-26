@@ -9,13 +9,20 @@ use std::collections::HashMap;
 /// Weights used in the weighted average for each field and uptime.
 /// Higher weight means the field contributes more to the overall score.
 static WEIGHTS: &[(&str, f64)] = &[
+    ("route_id", 3.0),
+    ("direction_id", 3.0),
+    ("stop_id", 3.0),
+    ("stop_sequence", 3.0),
+    ("trip_id", 2.0),
+    ("vehicle_id", 1.0),
+    ("vehicle_label", 1.0),
+    ("license_plate", 1.0),
+    ("wheelchair_accessible", 1.0),
     ("bearing", 1.0),
     ("speed", 1.0),
     ("occupancy", 2.0),
-    ("stop_sequence", 2.0),
     ("multi_carriage", 1.0),
     ("odometer", 1.0),
-    ("stop_id", 1.0),
     ("current_status", 1.0),
     ("timestamp", 1.0),
     ("congestion_level", 1.0),
@@ -38,7 +45,25 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
         (last - first).num_minutes()
     };
 
-    let mut uptime_minutes = 0i64;
+    // Uptime: fraction of polling attempts where the API responded without error.
+    let successful_polls = rows
+        .iter()
+        .filter(|r| r.error_type.as_deref().map_or(true, |s| s.is_empty()))
+        .count();
+    let uptime_percent = if rows.is_empty() {
+        0.0
+    } else {
+        successful_polls as f64 / rows.len() as f64
+    };
+
+    // Service time: fraction of polling attempts where at least one vehicle was present.
+    let service_polls = rows.iter().filter(|r| r.vehicles > 0).count();
+    let service_time_percent = if rows.is_empty() {
+        0.0
+    } else {
+        service_polls as f64 / rows.len() as f64
+    };
+
     let mut vehicle_counts = Vec::new();
 
     let mut field_series: HashMap<&str, Vec<f64>> = HashMap::new();
@@ -48,7 +73,6 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
             continue;
         }
 
-        uptime_minutes += 1;
         vehicle_counts.push(row.vehicles as f64);
 
         macro_rules! push_field {
@@ -60,6 +84,13 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
             };
         }
 
+        push_field!("trip_id", row.with_trip_id);
+        push_field!("route_id", row.with_route_id);
+        push_field!("direction_id", row.with_direction_id);
+        push_field!("vehicle_id", row.with_vehicle_id);
+        push_field!("vehicle_label", row.with_vehicle_label);
+        push_field!("license_plate", row.with_license_plate);
+        push_field!("wheelchair_accessible", row.with_wheelchair_accessible);
         push_field!("bearing", row.with_bearing);
         push_field!("speed", row.with_speed);
         push_field!("occupancy", row.with_occupancy);
@@ -74,11 +105,6 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
     }
 
     let avg_vehicles = mean(&vehicle_counts);
-    let uptime_percent = if window_minutes == 0 {
-        0.0
-    } else {
-        uptime_minutes as f64 / window_minutes as f64
-    };
 
     let weights: HashMap<&str, f64> = WEIGHTS.iter().copied().collect();
 
@@ -122,13 +148,14 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
 
     Ok(FeedAggregate {
         schema_version: 1,
-        algorithm_version: 1,
+        algorithm_version: 2,
         feed_id: feed_id.to_string(),
         last_updated: now,
         window_minutes,
         entity_stats: EntityStats {
             avg_vehicles,
             uptime_percent,
+            service_time_percent,
         },
         fields,
         overall: OverallAggregate {

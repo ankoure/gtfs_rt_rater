@@ -31,7 +31,14 @@ pub struct FeedStats {
 
     // vehicle fields
     pub with_trip: usize,
+    pub with_trip_id: usize,
+    pub with_route_id: usize,
+    pub with_direction_id: usize,
     pub with_vehicle_descriptor: usize,
+    pub with_vehicle_id: usize,
+    pub with_vehicle_label: usize,
+    pub with_license_plate: usize,
+    pub with_wheelchair_accessible: usize,
     pub with_position: usize,
     pub with_bearing: usize,
     pub with_speed: usize,
@@ -65,7 +72,14 @@ impl FeedStats {
             stops: 0,
             trip_modifications: 0,
             with_trip: 0,
+            with_trip_id: 0,
+            with_route_id: 0,
+            with_direction_id: 0,
             with_vehicle_descriptor: 0,
+            with_vehicle_id: 0,
+            with_vehicle_label: 0,
+            with_license_plate: 0,
+            with_wheelchair_accessible: 0,
             with_position: 0,
             with_bearing: 0,
             with_speed: 0,
@@ -88,12 +102,42 @@ impl FeedStats {
             if let Some(v) = &e.vehicle {
                 s.vehicles += 1;
 
-                if v.trip.is_some() {
+                if let Some(trip) = &v.trip {
                     s.with_trip += 1;
+
+                    if trip.trip_id.is_some() {
+                        s.with_trip_id += 1;
+                    }
+
+                    if trip.route_id.is_some() {
+                        s.with_route_id += 1;
+                    }
+
+                    if trip.direction_id.is_some() {
+                        s.with_direction_id += 1;
+                    }
                 }
 
-                if v.vehicle.is_some() {
+                if let Some(vd) = &v.vehicle {
                     s.with_vehicle_descriptor += 1;
+
+                    if vd.id.is_some() {
+                        s.with_vehicle_id += 1;
+                    }
+
+                    if vd.label.is_some() {
+                        s.with_vehicle_label += 1;
+                    }
+
+                    if vd.license_plate.is_some() {
+                        s.with_license_plate += 1;
+                    }
+
+                    // wheelchair_accessible = 0 means NO_VALUE (default); only
+                    // count when the producer explicitly set a non-default value.
+                    if vd.wheelchair_accessible.map_or(false, |v| v != 0) {
+                        s.with_wheelchair_accessible += 1;
+                    }
                 }
 
                 if let Some(pos) = &v.position {

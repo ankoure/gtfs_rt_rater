@@ -9,6 +9,16 @@ use std::collections::HashMap;
 pub struct FeedStats {
     pub(crate) timestamp: DateTime<Utc>,
     pub(crate) vehicles: usize,
+    pub(crate) error_type: Option<String>,
+
+    pub(crate) with_trip_id: usize,
+    pub(crate) with_route_id: usize,
+    pub(crate) with_direction_id: usize,
+
+    pub(crate) with_vehicle_id: usize,
+    pub(crate) with_vehicle_label: usize,
+    pub(crate) with_license_plate: usize,
+    pub(crate) with_wheelchair_accessible: usize,
 
     pub(crate) with_bearing: usize,
     pub(crate) with_speed: usize,
@@ -30,11 +40,12 @@ pub struct FieldAggregate {
     pub(crate) grade: String,
 }
 
-/// High-level entity statistics: average vehicle count and uptime.
+/// High-level entity statistics: average vehicle count, uptime, and service time.
 #[derive(Serialize)]
 pub struct EntityStats {
     pub(crate) avg_vehicles: f64,
     pub(crate) uptime_percent: f64,
+    pub(crate) service_time_percent: f64,
 }
 
 /// Overall weighted score and letter grade for a feed.

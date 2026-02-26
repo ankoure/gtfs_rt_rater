@@ -14,18 +14,18 @@ static WEIGHTS: &[(&str, f64)] = &[
     ("stop_id", 3.0),
     ("stop_sequence", 3.0),
     ("trip_id", 2.0),
-    ("vehicle_id", 0),
-    ("vehicle_label", 0),
-    ("license_plate", 0),
-    ("wheelchair_accessible", 0),
-    ("bearing", 0),
-    ("speed", 0),
+    ("vehicle_id", 0.0),
+    ("vehicle_label", 0.0),
+    ("license_plate", 0.0),
+    ("wheelchair_accessible", 0.0),
+    ("bearing", 0.0),
+    ("speed", 0.0),
     ("occupancy", 1.0),
-    ("multi_carriage", 0),
-    ("odometer", 0),
+    ("multi_carriage", 0.0),
+    ("odometer", 0.0),
     ("current_status", 1.0),
     ("timestamp", 1.0),
-    ("congestion_level", 0),
+    ("congestion_level", 0.0),
     ("occupancy_percentage", 1.0),
     ("uptime", 3.0),
 ];
@@ -163,4 +163,103 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
             grade: grade(overall_score),
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    /// Builds a minimal `FeedStats` row with all counts zeroed out.
+    /// Override only the fields relevant to each test.
+    fn make_row(vehicles: usize, error: bool) -> FeedStats {
+        FeedStats {
+            timestamp: Utc::now(),
+            vehicles,
+            error_type: if error {
+                Some("fetch_error".to_string())
+            } else {
+                None
+            },
+            with_trip_id: 0,
+            with_route_id: 0,
+            with_direction_id: 0,
+            with_vehicle_id: 0,
+            with_vehicle_label: 0,
+            with_license_plate: 0,
+            with_wheelchair_accessible: 0,
+            with_bearing: 0,
+            with_speed: 0,
+            with_odometer: 0,
+            with_current_stop_sequence: 0,
+            with_stop_id: 0,
+            with_current_status: 0,
+            with_timestamp: 0,
+            with_congestion_level: 0,
+            with_occupancy: 0,
+            with_occupancy_percentage: 0,
+            with_multi_carriage_details: 0,
+        }
+    }
+
+    #[test]
+    fn test_empty_rows() {
+        let result = aggregate_feed("test-feed", vec![]).unwrap();
+        assert_eq!(result.entity_stats.uptime_percent, 0.0);
+        assert_eq!(result.entity_stats.service_time_percent, 0.0);
+        assert_eq!(result.overall.score, 0.0);
+        assert!(result.fields.is_empty());
+    }
+
+    #[test]
+    fn test_all_error_rows() {
+        let rows = vec![make_row(0, true), make_row(0, true)];
+        let result = aggregate_feed("test-feed", rows).unwrap();
+        assert_eq!(result.entity_stats.uptime_percent, 0.0);
+    }
+
+    #[test]
+    fn test_uptime_fraction() {
+        // 3 successful, 1 error → uptime = 0.75
+        let rows = vec![
+            make_row(10, false),
+            make_row(10, false),
+            make_row(10, false),
+            make_row(0, true),
+        ];
+        let result = aggregate_feed("test-feed", rows).unwrap();
+        assert!((result.entity_stats.uptime_percent - 0.75).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_service_time_fraction() {
+        // 2 rows with vehicles, 2 without → service_time = 0.5
+        let rows = vec![
+            make_row(5, false),
+            make_row(5, false),
+            make_row(0, false),
+            make_row(0, false),
+        ];
+        let result = aggregate_feed("test-feed", rows).unwrap();
+        assert!((result.entity_stats.service_time_percent - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_field_avg_support() {
+        // 1 vehicle, route_id present → route_id avg_support should be 1.0
+        let mut row = make_row(1, false);
+        row.with_route_id = 1;
+        let result = aggregate_feed("test-feed", vec![row]).unwrap();
+        let route = result.fields.get("route_id").unwrap();
+        assert!((route.avg_support - 1.0).abs() < 1e-10);
+        assert_eq!(route.grade, "A+");
+    }
+
+    #[test]
+    fn test_no_vehicles_rows_skipped_for_fields() {
+        // Rows with vehicles=0 should not contribute to field averages
+        let rows = vec![make_row(0, false), make_row(0, false)];
+        let result = aggregate_feed("test-feed", rows).unwrap();
+        assert!(result.fields.is_empty());
+    }
 }

@@ -21,8 +21,17 @@ use gtfs_rt_rater::{
     parser::parse_feed,
     stats::FeedStats,
 };
-use log::{error, info};
+use std::ffi::OsStr;
 use std::io::Write;
+use std::path::Path;
+use tracing::Instrument;
+use tracing::{debug, error, info, warn};
+use tracing_subscriber::{
+    EnvFilter, Layer,
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+};
 
 #[derive(Parser)]
 #[command(name = "gtfs_rt_rater")]
@@ -91,7 +100,38 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok(); // Load .env file
-    env_logger::init(); // Initialize logger
+
+    // Logging setup: colored stderr + JSON rolling log file
+    let log_file_path =
+        std::env::var("LOG_FILE_PATH").unwrap_or_else(|_| "logs/gtfs_rt_rater.log".to_string());
+    let log_dir = Path::new(&log_file_path)
+        .parent()
+        .unwrap_or(Path::new("logs"));
+    let log_file_name = Path::new(&log_file_path)
+        .file_name()
+        .unwrap_or(OsStr::new("gtfs_rt_rater.log"));
+
+    let file_appender = tracing_appender::rolling::daily(log_dir, log_file_name);
+    let (non_blocking_file, _file_guard) = tracing_appender::non_blocking(file_appender);
+
+    let stderr_layer = fmt::layer()
+        .with_target(true)
+        .with_span_events(FmtSpan::CLOSE)
+        .with_ansi(true)
+        .with_writer(std::io::stderr)
+        .with_filter(EnvFilter::from_env("RUST_LOG").add_directive("info".parse().unwrap()));
+
+    let json_layer = fmt::layer()
+        .json()
+        .with_current_span(true)
+        .with_span_list(true)
+        .with_writer(non_blocking_file)
+        .with_filter(EnvFilter::from_env("RUST_LOG_JSON").add_directive("debug".parse().unwrap()));
+
+    tracing_subscriber::registry()
+        .with(stderr_layer)
+        .with(json_layer)
+        .init();
 
     let cli = Cli::parse();
 
@@ -108,7 +148,7 @@ async fn main() -> Result<()> {
             s3_bucket,
         } => {
             if s3_bucket.is_empty() {
-                info!("S3 bucket is empty, skipping upload");
+                info!("S3 bucket not specified, skipping upload");
             } else {
                 analyze(&s3_bucket, &output_dir).await?;
             }
@@ -122,16 +162,24 @@ async fn main() -> Result<()> {
 
             let feeds = client.list_feeds().await?;
 
-            info!("Total feeds: {}\n", feeds.len());
+            info!(total = feeds.len(), "Feed list fetched");
 
             for feed in &feeds {
                 let status_str = feed.status.as_deref().unwrap_or("active");
-                let auth_str = if feed.requires_auth { "🔒" } else { "🔓" };
-                let url_str = if feed.url.is_some() { "✓" } else { "✗" };
+                let auth_str = if feed.requires_auth {
+                    "auth-required"
+                } else {
+                    "open"
+                };
+                let has_url = feed.url.is_some();
 
                 info!(
-                    "{} {} [{}] {} - {}",
-                    auth_str, url_str, status_str, feed.id, feed.name
+                    feed_id = %feed.id,
+                    feed_name = %feed.name,
+                    status = status_str,
+                    auth = auth_str,
+                    has_url,
+                    "Feed"
                 );
             }
 
@@ -149,12 +197,14 @@ async fn main() -> Result<()> {
                 })
                 .count();
 
-            info!("\nSummary:");
-            info!("  Total feeds: {}", feeds.len());
-            info!("  Deprecated: {}", deprecated_count);
-            info!("  Auth required: {}", auth_required);
-            info!("  No URL: {}", no_url);
-            info!("  Processable by consume-all-feeds: {}", processable);
+            info!(
+                total = feeds.len(),
+                deprecated = deprecated_count,
+                auth_required,
+                no_url,
+                processable,
+                "Feed list summary"
+            );
         }
         Commands::ConsumeAllFeeds {
             output_dir,
@@ -180,6 +230,7 @@ async fn main() -> Result<()> {
 }
 
 /// Loads feed data from a local file path or fetches it over HTTP.
+#[tracing::instrument(fields(source = %url))]
 async fn fetcher(url: &String) -> Result<Vec<u8>> {
     let bytes = if url.starts_with("http") {
         let client = BasicClient::new();
@@ -192,6 +243,10 @@ async fn fetcher(url: &String) -> Result<Vec<u8>> {
 
 /// Fetches all public GTFS-RT feeds concurrently, collecting samples at a
 /// configurable interval and optionally uploading previous-day results to S3.
+#[tracing::instrument(
+    skip(s3_bucket, gzip),
+    fields(output_dir, concurrency, sample_rate, num_samples)
+)]
 async fn consume_all_feeds(
     output_dir: &str,
     concurrency: usize,
@@ -213,10 +268,10 @@ async fn consume_all_feeds(
     };
 
     if let Some(ref bucket) = s3_bucket {
-        info!("S3 upload enabled: bucket={}, gzip={}", bucket, gzip);
+        info!(bucket = %bucket, gzip, "S3 upload enabled");
     }
 
-    info!("Fetching feed list from MobilityData...");
+    info!("Fetching feed list from MobilityData");
     let feeds = client.list_feeds().await?;
 
     // Filter feeds that don't require authentication, have a URL, and are not deprecated
@@ -228,20 +283,14 @@ async fn consume_all_feeds(
         .collect();
 
     info!(
-        "Found {} public feeds to process (excluding deprecated)",
-        public_feeds.len()
+        feed_count = public_feeds.len(),
+        "Public feeds ready for processing"
     );
 
     if num_samples == 0 {
-        info!(
-            "Sampling infinitely every {} seconds. Press Ctrl+C to stop.",
-            sample_rate
-        );
+        info!(sample_rate, "Sampling infinitely. Press Ctrl+C to stop.");
     } else {
-        info!(
-            "Collecting {} sample(s) every {} seconds",
-            num_samples, sample_rate
-        );
+        info!(num_samples, sample_rate, "Starting sample collection");
     }
 
     // Create output directory if it doesn't exist
@@ -271,7 +320,7 @@ async fn consume_all_feeds(
                         let bucket = bucket.to_string();
                         let output_dir = output_dir.to_string();
                         tokio::spawn(async move {
-                            info!("\n=== Uploading previous day's files to S3 ===");
+                            info!(date = %yesterday, "Uploading previous day's files to S3");
                             if let Err(e) = upload_previous_day_files(
                                 &s3,
                                 &bucket,
@@ -281,20 +330,18 @@ async fn consume_all_feeds(
                             )
                             .await
                             {
-                                error!("Failed to upload previous day's files: {}", e);
+                                error!(error = %e, "Failed to upload previous day's files");
                             } else {
-                                info!("✓ Successfully uploaded previous day's files");
+                                info!(date = %yesterday, "Successfully uploaded previous day's files");
                             }
 
-                            info!("\n=== Aggregating previous day's data ===");
+                            info!(date = %yesterday, "Aggregating previous day's data");
                             if let Err(e) =
                                 analyze_for_date(&s3, &bucket, &output_dir, yesterday).await
                             {
-                                error!("Failed to aggregate previous day's data: {}", e);
+                                error!(error = %e, "Failed to aggregate previous day's data");
                             } else {
-                                info!(
-                                    "✓ Successfully aggregated and cleaned up previous day's data"
-                                );
+                                info!(date = %yesterday, "Successfully aggregated and cleaned up previous day's data");
                             }
                         });
 
@@ -305,13 +352,13 @@ async fn consume_all_feeds(
         }
 
         info!(
-            "\n=== Sample {} {} ===",
-            sample_count,
-            if num_samples == 0 {
-                "(infinite mode)".to_string()
+            sample = sample_count,
+            total = if num_samples == 0 {
+                None
             } else {
-                format!("of {}", num_samples)
-            }
+                Some(num_samples)
+            },
+            "Starting sample round"
         );
 
         let mut tasks = vec![];
@@ -321,52 +368,74 @@ async fn consume_all_feeds(
             let output_dir = output_dir.to_string();
             let feed = feed.clone();
 
-            let task = tokio::spawn(async move {
-                let _permit = sem.acquire().await.unwrap();
+            let feed_span = tracing::info_span!(
+                "process_feed",
+                feed_id = %feed.id,
+                feed_name = %feed.name,
+            );
 
-                let url = feed.url.as_ref().unwrap();
+            let task = tokio::spawn(
+                async move {
+                    let _permit = sem.acquire().await.unwrap();
 
-                let http_client = BasicClient::new();
+                    let url = feed.url.as_ref().unwrap();
 
-                // Create agency directory with date-based CSV files
-                let now = Utc::now();
-                let date = now.format("%Y-%m-%d").to_string();
-                let agency_dir = format!("{}/agency_id={}", output_dir, feed.id);
+                    let http_client = BasicClient::new();
 
-                // Create directory structure if it doesn't exist
-                if let Err(e) = std::fs::create_dir_all(&agency_dir) {
-                    error!("Failed to create directory {}: {}", agency_dir, e);
-                    return;
-                }
+                    // Create agency directory with date-based CSV files
+                    let now = Utc::now();
+                    let date = now.format("%Y-%m-%d").to_string();
+                    let agency_dir = format!("{}/agency_id={}", output_dir, feed.id);
 
-                let output_file = format!("{}/date={}.csv", agency_dir, date);
+                    // Create directory structure if it doesn't exist
+                    if let Err(e) = std::fs::create_dir_all(&agency_dir) {
+                        error!(dir = %agency_dir, error = %e, "Failed to create agency directory");
+                        return;
+                    }
 
-                match fetch_bytes(&http_client, url).await {
-                    Ok(bytes) => match parse_feed(&bytes) {
-                        Ok(parsed_feed) => {
-                            let stats = FeedStats::from_feed(&parsed_feed)
-                                .with_feed_info(&feed.id, &feed.name);
-                            if let Err(e) = append_record(&output_file, &stats) {
-                                error!("Failed to write stats for {}: {}", feed.id, e);
-                            } else {
-                                info!("✓ {} - {}", feed.id, feed.name);
+                    let output_file = format!("{}/date={}.csv", agency_dir, date);
+
+                    let fetch_start = std::time::Instant::now();
+                    match fetch_bytes(&http_client, url).await {
+                        Ok(bytes) => {
+                            let elapsed = fetch_start.elapsed();
+                            if elapsed.as_secs() > 15 {
+                                warn!(elapsed_secs = elapsed.as_secs(), "Feed fetch was slow");
+                            }
+                            debug!(bytes = bytes.len(), "Feed bytes received, parsing");
+                            match parse_feed(&bytes) {
+                                Ok(parsed_feed) => {
+                                    debug!(
+                                        entity_count = parsed_feed.entity.len(),
+                                        "Feed parsed successfully"
+                                    );
+                                    let stats = FeedStats::from_feed(&parsed_feed)
+                                        .with_feed_info(&feed.id, &feed.name);
+                                    if let Err(e) = append_record(&output_file, &stats) {
+                                        error!(error = %e, "Failed to write stats for feed");
+                                    } else {
+                                        info!("Feed processed successfully");
+                                    }
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "Feed parse failed");
+                                    let error_stats =
+                                        FeedStats::from_error("parse_error", &e.to_string())
+                                            .with_feed_info(&feed.id, &feed.name);
+                                    let _ = append_record(&output_file, &error_stats);
+                                }
                             }
                         }
                         Err(e) => {
-                            error!("✗ Failed to parse feed {}: {}", feed.id, e);
-                            let error_stats = FeedStats::from_error("parse_error", &e.to_string())
+                            error!(error = %e, "Feed HTTP fetch failed");
+                            let error_stats = FeedStats::from_error("fetch_error", &e.to_string())
                                 .with_feed_info(&feed.id, &feed.name);
                             let _ = append_record(&output_file, &error_stats);
                         }
-                    },
-                    Err(e) => {
-                        error!("✗ Failed to fetch feed {}: {}", feed.id, e);
-                        let error_stats = FeedStats::from_error("fetch_error", &e.to_string())
-                            .with_feed_info(&feed.id, &feed.name);
-                        let _ = append_record(&output_file, &error_stats);
                     }
                 }
-            });
+                .instrument(feed_span),
+            );
 
             tasks.push(task);
         }
@@ -378,19 +447,17 @@ async fn consume_all_feeds(
 
         // If not the last sample, wait before next iteration
         if num_samples == 0 || sample_count < num_samples {
-            info!("Waiting {} seconds until next sample...", sample_rate);
+            info!(sample_rate, "Waiting before next sample");
             tokio::time::sleep(tokio::time::Duration::from_secs(sample_rate)).await;
         }
     }
 
-    info!(
-        "\nFinished processing all feeds. Results saved to {}/",
-        output_dir
-    );
+    info!(output_dir, "Finished processing all feeds");
     Ok(())
 }
 
 /// Uploads CSV files from the previous day to S3, optionally gzip-compressing them.
+#[tracing::instrument(skip(client), fields(bucket, output_dir, date = %date, gzip))]
 async fn upload_previous_day_files(
     client: &aws_sdk_s3::Client,
     bucket: &str,
@@ -455,6 +522,6 @@ async fn upload_previous_day_files(
         }
     }
 
-    info!("✓ Uploaded {} files for {}", upload_count, date_str);
+    info!(upload_count, date = %date_str, "S3 upload complete");
     Ok(())
 }

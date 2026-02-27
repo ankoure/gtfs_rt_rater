@@ -3,12 +3,13 @@ use crate::analyzers::types::{FeedIndex, FeedIndexEntry, FeedStats};
 use crate::analyzers::writetos3::write_json_to_s3;
 use anyhow::Result;
 use chrono::NaiveDate;
-use log::info;
 use std::fs;
 use std::fs::File;
+use tracing::{debug, info, warn};
 
 /// Aggregates all local feed CSVs, uploads per-feed JSON and an index to S3,
 /// then deletes the processed CSVs.
+#[tracing::instrument(fields(bucket, base_dir))]
 pub async fn analyze(bucket: &str, base_dir: &str) -> anyhow::Result<()> {
     let config = aws_config::load_from_env().await;
     let s3 = aws_sdk_s3::Client::new(&config);
@@ -21,20 +22,19 @@ pub async fn analyze(bucket: &str, base_dir: &str) -> anyhow::Result<()> {
         // Load local CSVs for feed
         let rows = load_feed_rows(base_dir, &feed_id)?;
         if rows.is_empty() {
+            warn!(feed_id = %feed_id, "No rows found for feed, skipping aggregation");
             continue;
         }
+
+        debug!(feed_id = %feed_id, row_count = rows.len(), "Aggregating feed rows");
 
         // Aggregate
         let aggregate = aggregate_feed(&feed_id, rows)?;
 
         // Upload JSON to S3
-        write_json_to_s3(
-            &s3,
-            bucket,
-            &format!("aggregates/feeds/{}.json", feed_id),
-            &aggregate,
-        )
-        .await?;
+        let s3_key = format!("aggregates/feeds/{}.json", feed_id);
+        write_json_to_s3(&s3, bucket, &s3_key, &aggregate).await?;
+        debug!(feed_id = %feed_id, key = %s3_key, "Uploaded feed aggregate to S3");
 
         // Add to index
         index_entries.push(FeedIndexEntry {
@@ -114,6 +114,7 @@ fn delete_feed_csvs(base_dir: &str, feed_id: &str) -> Result<()> {
 }
 
 /// Analyze and aggregate feeds for a specific date, upload JSON to S3, then delete local CSVs.
+#[tracing::instrument(skip(s3), fields(bucket, base_dir, date = %date))]
 pub async fn analyze_for_date(
     s3: &aws_sdk_s3::Client,
     bucket: &str,
@@ -121,7 +122,7 @@ pub async fn analyze_for_date(
     date: NaiveDate,
 ) -> Result<()> {
     let date_str = date.format("%Y-%m-%d").to_string();
-    info!("Starting aggregation for date {}", date_str);
+    info!(date = %date_str, "Starting aggregation");
 
     let feed_ids = load_feed_ids(base_dir)?;
     let mut index_entries = Vec::new();
@@ -129,18 +130,16 @@ pub async fn analyze_for_date(
     for feed_id in feed_ids {
         let rows = load_feed_rows_for_date(base_dir, &feed_id, &date_str)?;
         if rows.is_empty() {
+            warn!(feed_id = %feed_id, "No rows found for feed, skipping aggregation");
             continue;
         }
 
+        debug!(feed_id = %feed_id, row_count = rows.len(), "Aggregating feed rows");
         let aggregate = aggregate_feed(&feed_id, rows)?;
 
-        write_json_to_s3(
-            s3,
-            bucket,
-            &format!("aggregates/feeds/{}.json", feed_id),
-            &aggregate,
-        )
-        .await?;
+        let s3_key = format!("aggregates/feeds/{}.json", feed_id);
+        write_json_to_s3(s3, bucket, &s3_key, &aggregate).await?;
+        debug!(feed_id = %feed_id, key = %s3_key, "Uploaded feed aggregate to S3");
 
         index_entries.push(FeedIndexEntry {
             feed_id: feed_id.to_string(),
@@ -158,7 +157,7 @@ pub async fn analyze_for_date(
     };
     write_json_to_s3(s3, bucket, "aggregates/feeds.json", &index).await?;
 
-    info!("Aggregation complete for date {}", date_str);
+    info!(date = %date_str, "Aggregation complete");
     Ok(())
 }
 
@@ -192,7 +191,7 @@ fn delete_feed_csv_for_date(base_dir: &str, feed_id: &str, date_str: &str) -> Re
 
     if path.exists() {
         fs::remove_file(path)?;
-        info!("Deleted {}", csv_path);
+        debug!(path = %csv_path, "Deleted local CSV after aggregation");
     }
 
     Ok(())

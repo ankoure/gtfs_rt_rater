@@ -262,4 +262,70 @@ mod tests {
         let result = aggregate_feed("test-feed", rows).unwrap();
         assert!(result.fields.is_empty());
     }
+
+    #[test]
+    fn test_partial_field_support() {
+        // 4 vehicles, only 2 have route_id → avg_support = 0.5
+        let mut row = make_row(4, false);
+        row.with_route_id = 2;
+        let result = aggregate_feed("test-feed", vec![row]).unwrap();
+        let route = result.fields.get("route_id").unwrap();
+        assert!((route.avg_support - 0.5).abs() < 1e-10);
+        assert_eq!(route.grade, "D"); // 0.5 >= 0.40 → D
+    }
+
+    #[test]
+    fn test_avg_vehicles() {
+        // Two rows with 4 and 8 vehicles → avg = 6.0
+        let rows = vec![make_row(4, false), make_row(8, false)];
+        let result = aggregate_feed("test-feed", rows).unwrap();
+        assert!((result.entity_stats.avg_vehicles - 6.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_window_minutes() {
+        use chrono::Duration;
+        let t0 = Utc::now();
+        let mut row1 = make_row(5, false);
+        row1.timestamp = t0;
+        let mut row2 = make_row(5, false);
+        row2.timestamp = t0 + Duration::minutes(45);
+        let result = aggregate_feed("test-feed", vec![row1, row2]).unwrap();
+        assert_eq!(result.window_minutes, 45);
+    }
+
+    #[test]
+    fn test_single_row_window_is_zero() {
+        let result = aggregate_feed("test-feed", vec![make_row(5, false)]).unwrap();
+        assert_eq!(result.window_minutes, 0);
+    }
+
+    #[test]
+    fn test_overall_score_full_uptime_no_vehicle_data() {
+        // No vehicle rows → only uptime contributes to weighted score.
+        // uptime=1.0, uptime_weight=3.0 → score = 3.0/3.0 = 1.0
+        let rows = vec![make_row(0, false), make_row(0, false)];
+        let result = aggregate_feed("test-feed", rows).unwrap();
+        assert!((result.overall.score - 1.0).abs() < 1e-10);
+        assert_eq!(result.overall.grade, "A+");
+    }
+
+    #[test]
+    fn test_feed_id_preserved() {
+        let result = aggregate_feed("my-agency-feed", vec![]).unwrap();
+        assert_eq!(result.feed_id, "my-agency-feed");
+    }
+
+    #[test]
+    fn test_field_stddev_nonzero() {
+        // Row 1: all 4 vehicles have route_id → support = 1.0
+        // Row 2: 0 of 4 have route_id → support = 0.0
+        // mean = 0.5, population stddev = 0.5
+        let mut row1 = make_row(4, false);
+        row1.with_route_id = 4;
+        let row2 = make_row(4, false);
+        let result = aggregate_feed("test-feed", vec![row1, row2]).unwrap();
+        let route = result.fields.get("route_id").unwrap();
+        assert!((route.stddev - 0.5).abs() < 1e-10);
+    }
 }

@@ -311,6 +311,160 @@ mod tests {
         assert_eq!(stats.bearing_pct(), 75.0);
     }
 
+    #[test]
+    fn test_from_error() {
+        let stats = FeedStats::from_error("fetch_error", "timeout after 10s");
+        assert_eq!(stats.error_type.as_deref(), Some("fetch_error"));
+        assert_eq!(stats.error_message.as_deref(), Some("timeout after 10s"));
+        assert_eq!(stats.vehicles, 0);
+        assert_eq!(stats.total_entities, 0);
+    }
+
+    #[test]
+    fn test_with_feed_info() {
+        let stats = FeedStats::default().with_feed_info("feed-123", "My Transit Feed");
+        assert_eq!(stats.feed_id.as_deref(), Some("feed-123"));
+        assert_eq!(stats.feed_name.as_deref(), Some("My Transit Feed"));
+    }
+
+    #[test]
+    fn test_from_feed_with_trip_fields() {
+        use crate::gtfs_rt::TripDescriptor;
+        let feed = FeedMessage {
+            header: create_header(),
+            entity: vec![FeedEntity {
+                id: "v1".to_string(),
+                vehicle: Some(VehiclePosition {
+                    trip: Some(TripDescriptor {
+                        trip_id: Some("trip-1".to_string()),
+                        route_id: Some("route-1".to_string()),
+                        direction_id: Some(1),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        };
+        let stats = FeedStats::from_feed(&feed);
+        assert_eq!(stats.with_trip, 1);
+        assert_eq!(stats.with_trip_id, 1);
+        assert_eq!(stats.with_route_id, 1);
+        assert_eq!(stats.with_direction_id, 1);
+    }
+
+    #[test]
+    fn test_from_feed_with_vehicle_descriptor() {
+        use crate::gtfs_rt::VehicleDescriptor;
+        let feed = FeedMessage {
+            header: create_header(),
+            entity: vec![FeedEntity {
+                id: "v1".to_string(),
+                vehicle: Some(VehiclePosition {
+                    vehicle: Some(VehicleDescriptor {
+                        id: Some("bus-42".to_string()),
+                        label: Some("42".to_string()),
+                        license_plate: Some("ABC123".to_string()),
+                        wheelchair_accessible: Some(1), // non-zero → counted
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        };
+        let stats = FeedStats::from_feed(&feed);
+        assert_eq!(stats.with_vehicle_descriptor, 1);
+        assert_eq!(stats.with_vehicle_id, 1);
+        assert_eq!(stats.with_vehicle_label, 1);
+        assert_eq!(stats.with_license_plate, 1);
+        assert_eq!(stats.with_wheelchair_accessible, 1);
+    }
+
+    #[test]
+    fn test_from_feed_wheelchair_default_not_counted() {
+        use crate::gtfs_rt::VehicleDescriptor;
+        let feed = FeedMessage {
+            header: create_header(),
+            entity: vec![FeedEntity {
+                id: "v1".to_string(),
+                vehicle: Some(VehiclePosition {
+                    vehicle: Some(VehicleDescriptor {
+                        wheelchair_accessible: Some(0), // 0 = NoValue → not counted
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        };
+        let stats = FeedStats::from_feed(&feed);
+        assert_eq!(stats.with_wheelchair_accessible, 0);
+    }
+
+    #[test]
+    fn test_from_feed_vehicle_optional_fields() {
+        use crate::gtfs_rt::vehicle_position::CarriageDetails;
+        let feed = FeedMessage {
+            header: create_header(),
+            entity: vec![FeedEntity {
+                id: "v1".to_string(),
+                vehicle: Some(VehiclePosition {
+                    current_stop_sequence: Some(5),
+                    stop_id: Some("stop-1".to_string()),
+                    current_status: Some(1),
+                    congestion_level: Some(1),
+                    occupancy_status: Some(1),
+                    occupancy_percentage: Some(50),
+                    multi_carriage_details: vec![CarriageDetails::default()],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        };
+        let stats = FeedStats::from_feed(&feed);
+        assert_eq!(stats.with_current_stop_sequence, 1);
+        assert_eq!(stats.with_stop_id, 1);
+        assert_eq!(stats.with_current_status, 1);
+        assert_eq!(stats.with_congestion_level, 1);
+        assert_eq!(stats.with_occupancy, 1);
+        assert_eq!(stats.with_occupancy_percentage, 1);
+        assert_eq!(stats.with_multi_carriage_details, 1);
+    }
+
+    #[test]
+    fn test_from_feed_non_vehicle_entity_types() {
+        use crate::gtfs_rt::{Alert, TripDescriptor, TripModifications, TripUpdate};
+        let feed = FeedMessage {
+            header: create_header(),
+            entity: vec![
+                FeedEntity {
+                    id: "tu1".to_string(),
+                    trip_update: Some(TripUpdate {
+                        trip: TripDescriptor::default(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                FeedEntity {
+                    id: "a1".to_string(),
+                    alert: Some(Alert::default()),
+                    ..Default::default()
+                },
+                FeedEntity {
+                    id: "tm1".to_string(),
+                    trip_modifications: Some(TripModifications::default()),
+                    ..Default::default()
+                },
+            ],
+        };
+        let stats = FeedStats::from_feed(&feed);
+        assert_eq!(stats.total_entities, 3);
+        assert_eq!(stats.trip_updates, 1);
+        assert_eq!(stats.alerts, 1);
+        assert_eq!(stats.trip_modifications, 1);
+        assert_eq!(stats.vehicles, 0);
+    }
+
     // Helper functions for tests
     fn create_empty_feed() -> FeedMessage {
         FeedMessage {

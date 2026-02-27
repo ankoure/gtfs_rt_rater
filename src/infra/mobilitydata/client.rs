@@ -2,6 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use tracing::{debug, warn};
 
 use crate::services::catalog_api::{CatalogApi, Feed};
 
@@ -36,6 +37,7 @@ impl MobilityDataClient {
         })
     }
 
+    #[tracing::instrument(skip(refresh_token), fields(endpoint = "POST /v1/tokens"))]
     async fn exchange_token(refresh_token: &str) -> Result<String> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
@@ -56,6 +58,7 @@ impl MobilityDataClient {
 
         if !response.status().is_success() {
             let status = response.status();
+            warn!(status = %status, "Token exchange returned non-success HTTP status");
             let body = response.text().await.unwrap_or_default();
             return Err(anyhow::anyhow!(
                 "Token exchange failed with status {}: {}",
@@ -75,6 +78,7 @@ impl MobilityDataClient {
 
 #[async_trait]
 impl CatalogApi for MobilityDataClient {
+    #[tracing::instrument(skip(self), fields(feed_count))]
     async fn list_feeds(&self) -> Result<Vec<Feed>> {
         let url = format!(
             "{}/v1/gtfs_rt_feeds?limit=999&offset=0&entity_types=vp",
@@ -95,6 +99,7 @@ impl CatalogApi for MobilityDataClient {
 
         if !response.status().is_success() {
             let status = response.status();
+            warn!(status = %status, "MobilityData API returned non-success status");
             let body = response.text().await.unwrap_or_default();
             return Err(anyhow::anyhow!("API returned status {}: {}", status, body));
         }
@@ -105,7 +110,8 @@ impl CatalogApi for MobilityDataClient {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
 
-        let feeds = json
+        let raw_count = json.len();
+        let feeds: Vec<Feed> = json
             .into_iter()
             .filter_map(|item| {
                 let id = item["id"].as_str()?.to_string();
@@ -128,6 +134,13 @@ impl CatalogApi for MobilityDataClient {
                 })
             })
             .collect();
+
+        debug!(
+            raw_count,
+            processable = feeds.len(),
+            "Feeds fetched from MobilityData API"
+        );
+        tracing::Span::current().record("feed_count", feeds.len());
 
         Ok(feeds)
     }

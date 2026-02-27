@@ -52,4 +52,15 @@ mod tests {
         let vals = vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
         assert!((stddev(&vals, 5.0) - 2.0).abs() < 1e-10);
     }
+
+    #[test]
+    fn test_stddev_single_value() {
+        // A single element has no spread — stddev is 0.0
+        assert_eq!(stddev(&[42.0], 42.0), 0.0);
+    }
+
+    #[test]
+    fn test_mean_negative() {
+        assert!((mean(&[-3.0, 1.0]) - (-1.0)).abs() < 1e-10);
+    }
 }

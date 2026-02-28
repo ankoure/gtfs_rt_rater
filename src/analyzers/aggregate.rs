@@ -28,6 +28,7 @@ static WEIGHTS: &[(&str, f64)] = &[
     ("congestion_level", 0.0),
     ("occupancy_percentage", 1.0),
     ("uptime", 3.0),
+    ("service_time", 3.0),
 ];
 
 /// Aggregates a series of [`FeedStats`] rows into a single [`FeedAggregate`].
@@ -135,10 +136,14 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
         );
     }
 
-    // Factor uptime into overall score
+    // Factor uptime and service time into overall score
     let uptime_weight = *weights.get("uptime").unwrap_or(&3.0);
     weighted_total += uptime_percent * uptime_weight;
     weight_sum += uptime_weight;
+
+    let service_time_weight = *weights.get("service_time").unwrap_or(&3.0);
+    weighted_total += service_time_percent * service_time_weight;
+    weight_sum += service_time_weight;
 
     let overall_score = if weight_sum == 0.0 {
         0.0
@@ -148,7 +153,7 @@ pub fn aggregate_feed(feed_id: &str, rows: Vec<FeedStats>) -> anyhow::Result<Fee
 
     Ok(FeedAggregate {
         schema_version: 1,
-        algorithm_version: 2,
+        algorithm_version: 3,
         feed_id: feed_id.to_string(),
         last_updated: now,
         window_minutes,
@@ -302,12 +307,12 @@ mod tests {
 
     #[test]
     fn test_overall_score_full_uptime_no_vehicle_data() {
-        // No vehicle rows → only uptime contributes to weighted score.
-        // uptime=1.0, uptime_weight=3.0 → score = 3.0/3.0 = 1.0
+        // No vehicle rows → uptime=1.0 but service_time=0.0.
+        // score = (1.0*3 + 0.0*3) / (3+3) = 0.5 → D
         let rows = vec![make_row(0, false), make_row(0, false)];
         let result = aggregate_feed("test-feed", rows).unwrap();
-        assert!((result.overall.score - 1.0).abs() < 1e-10);
-        assert_eq!(result.overall.grade, "A+");
+        assert!((result.overall.score - 0.5).abs() < 1e-10);
+        assert_eq!(result.overall.grade, "D");
     }
 
     #[test]

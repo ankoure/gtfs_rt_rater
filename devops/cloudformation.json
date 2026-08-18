@@ -1,5 +1,20 @@
 {
   "Resources": {
+    "GtfsRtSsmLogsBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "gtfs-rt-ssm-logs",
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ExpireSsmTransferObjects",
+              "Status": "Enabled",
+              "ExpirationInDays": 1
+            }
+          ]
+        }
+      }
+    },
     "GtfsRtBucketPolicy": {
       "Type": "AWS::IAM::ManagedPolicy",
       "Properties": {

@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+cd "$(dirname "$0")"
+
 export AWS_REGION=us-east-1
 export AWS_DEFAULT_REGION=us-east-1
 export AWS_PAGER=""

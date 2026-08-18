@@ -111,7 +111,17 @@ async fn main() -> Result<()> {
         .file_name()
         .unwrap_or(OsStr::new("gtfs_rt_rater.log"));
 
-    let file_appender = tracing_appender::rolling::daily(log_dir, log_file_name);
+    let max_log_files: usize = std::env::var("LOG_MAX_FILES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(14);
+
+    let file_appender = tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix(log_file_name.to_string_lossy().to_string())
+        .max_log_files(max_log_files)
+        .build(log_dir)
+        .expect("failed to initialize rolling file appender");
     let (non_blocking_file, _file_guard) = tracing_appender::non_blocking(file_appender);
 
     let stderr_layer = fmt::layer()

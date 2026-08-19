@@ -40,4 +40,4 @@ ansible-galaxy collection install -r requirements.yml
 
 # Run playbook over SSM
 ansible-playbook -v -i $INSTANCE_ID, playbook.yml \
-  -e ansible_connection=amazon.aws.aws_ssm
+  -e ansible_connection=community.aws.aws_ssm

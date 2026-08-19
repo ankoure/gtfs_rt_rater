@@ -2,7 +2,7 @@
 - name: deploy gtfs-rt-rater on EC2
   hosts: all
   vars:
-    ansible_connection: aws_ssm
+    ansible_connection: community.aws.aws_ssm
     ansible_aws_ssm_bucket_name: gtfs-rt-ssm-logs
     ansible_aws_ssm_region: us-east-1
     ansible_remote_tmp: /tmp/.ansible/tmp

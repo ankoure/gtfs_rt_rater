@@ -1,3 +1,4 @@
 collections:
   - name: datadog.dd
   - name: amazon.aws
+  - name: community.aws

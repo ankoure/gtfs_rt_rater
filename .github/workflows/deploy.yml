@@ -22,10 +22,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: devops/artifacts/gtfs_rt_rater
-          key: gtfs-rt-rater-bin-aarch64-${{ hashFiles('src/**', 'proto/**', 'build.rs', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml') }}
+          key: gtfs-rt-rater-bin-aarch64-${{ hashFiles('src/**', 'proto/**', 'build.rs', 'Cargo.toml', 'Cargo.lock', '.cargo/config.toml', '.github/workflows/deploy.yml') }}
       - name: Install cross
         if: steps.cache-binary.outputs.cache-hit != 'true'
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross --locked
       - name: Build release binary for ARM64
         if: steps.cache-binary.outputs.cache-hit != 'true'
         run: cross build --release --target aarch64-unknown-linux-gnu
